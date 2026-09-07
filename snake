@@ -1,0 +1,7 @@
+#!/bin/sh
+# Lanceur conforme aux exemples du sujet : ./snake -sessions 10 ...
+DIR=$(cd "$(dirname "$0")" && pwd)
+if [ -x "$DIR/.venv/bin/python" ]; then
+    exec "$DIR/.venv/bin/python" "$DIR/main.py" "$@"
+fi
+exec python3 "$DIR/main.py" "$@"
