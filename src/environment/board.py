@@ -21,8 +21,42 @@ RED = "red"
 WALL = "wall"
 BODY = "body"
 STARVE = "starve"
+TIMEOUT = "timeout"
 
+# Vrais terminaux du MDP : il n'y a pas d'apres, l'agent ne bootstrappe pas.
 DEATH_EVENTS = (WALL, BODY, STARVE)
+# Causes de fin de partie, troncature comprise. Affichage et boucles de jeu.
+END_CAUSES = DEATH_EVENTS + (TIMEOUT,)
+
+# Libelles des causes de fin. Source unique : l'affichage et les statistiques
+# lisent cette table, personne ne la redefinit.
+END_CAUSE_LABELS = {
+    WALL: "collision avec un mur",
+    BODY: "collision avec la queue",
+    STARVE: "longueur nulle",
+    TIMEOUT: "trop de pas sans pomme",
+}
+
+# Pas sans pomme toleres avant troncature, par case du plateau.
+#
+# Proportionnel a l'AIRE et non a la longueur du serpent : c'est l'aire qui
+# donne le temps de recherche, puisque le serpent ne detecte une pomme que si
+# elle partage sa ligne ou sa colonne.
+#
+# Mesure : 300 parties par cellule, graine fixe, agent aleatoire ecartant les
+# directions immediatement mortelles. Pourcentage de parties tronquees :
+#
+#     regle              10x10     20x20     30x30
+#     4 x aire             2 %       5 %       6 %
+#     100 x longueur      14 %      76 %      97 %
+#     300 (constante)      8 %      86 %      98 %
+#
+# Une limite qui ignore la taille transforme le comportement normal en
+# troncature des que le plateau grandit. Celle-ci garde un taux stable.
+IDLE_FACTOR = 4
+
+# Longueur du serpent au depart, imposee par le sujet.
+SNAKE_LENGTH = 3
 
 WALL_CHAR = "W"
 HEAD_CHAR = "H"
@@ -35,11 +69,22 @@ EMPTY_CHAR = "0"
 class Board:
     """Plateau de jeu conforme au sujet : 10x10, 2 pommes vertes, 1 rouge."""
 
-    def __init__(self, size=10, greens=2, reds=1, rng=None):
+    def __init__(self, size=10, greens=2, reds=1, rng=None,
+                 idle_factor=IDLE_FACTOR):
+        # Sous 3 cases de cote, _spawn_snake ne trouverait jamais 3 cases
+        # alignees et tournerait indefiniment.
+        if size < SNAKE_LENGTH:
+            raise ValueError(
+                "taille de plateau trop petite : {}, minimum {}".format(
+                    size, SNAKE_LENGTH
+                )
+            )
         self.size = size
         self.n_greens = greens
         self.n_reds = reds
         self.rng = rng or random.Random()
+        # Un facteur nul ou negatif tronquerait des le premier pas.
+        self.idle_factor = max(1, idle_factor)
         self.reset()
 
     # -- cycle de vie -------------------------------------------------
@@ -53,10 +98,23 @@ class Board:
         for _ in range(self.n_reds):
             self._spawn_apple(self.reds)
         self.alive = True
+        self.truncated = False
         self.steps = 0
+        self.idle = 0
         self.max_length = len(self.snake)
         self.last_event = None
+        self.end_cause = None
         self.direction = self._initial_direction()
+
+    @property
+    def dead(self):
+        """Vrai terminal : une partie tronquee n'est pas une mort."""
+        return not self.alive and not self.truncated
+
+    @property
+    def idle_limit(self):
+        """Pas sans pomme avant troncature ; proportionnel a l'aire."""
+        return self.idle_factor * self.size * self.size
 
     def _initial_direction(self):
         head, neck = self.snake[0], self.snake[1]
@@ -72,7 +130,7 @@ class Board:
             step = self.rng.choice(DIRECTIONS)
             cells = [
                 (head[0] - step[0] * i, head[1] - step[1] * i)
-                for i in range(3)
+                for i in range(SNAKE_LENGTH)
             ]
             if all(self.inside(c) for c in cells):
                 return cells
@@ -97,9 +155,22 @@ class Board:
 
     # -- simulation ---------------------------------------------------
     def step(self, direction):
-        """Avance d'une case et retourne l'evenement resultant."""
+        """Avance d'une case et retourne l'evenement de jeu du pas.
+
+        La valeur rendue decrit ce qui est arrive au serpent : deplacement,
+        pomme, ou mort. Elle ne dit PAS si la partie s'arrete : une troncature
+        laisse l'evenement du pas intact (un deplacement reste un
+        deplacement, et garde son cout) et se lit sur `end_cause`,
+        `truncated` et `alive`.
+        """
         if not self.alive:
             return self.last_event
+
+        if direction not in DIRECTIONS:
+            raise ValueError(
+                "direction invalide : {!r}, attendu un element de "
+                "DIRECTIONS".format(direction)
+            )
 
         self.direction = direction
         head = self.snake[0]
@@ -134,12 +205,40 @@ class Board:
 
         self.max_length = max(self.max_length, len(self.snake))
         self.last_event = event
+
+        if event in (GREEN, RED):
+            self.idle = 0
+        else:
+            self.idle += 1
+            if self.idle >= self.idle_limit:
+                self.truncate()
         return event
 
     def _die(self, cause):
         self.alive = False
         self.last_event = cause
+        self.end_cause = cause
         return cause
+
+    def truncate(self):
+        """Arret sans mort : le serpent etait vivant, on a coupe le chrono.
+
+        Publique a dessein : la boucle de jeu possede son propre plafond de
+        securite et doit pouvoir terminer une partie de facon coherente, sans
+        laisser `end_cause` a None sur une partie finie.
+
+        Deux consequences, et la seconde est le piege a eviter :
+
+        - l'agent doit continuer a bootstrapper (d'ou `dead` qui reste faux),
+          sinon il apprend que vivre longtemps tue ;
+        - le pas qui a declenche la troncature est un deplacement ordinaire
+          et garde son cout. On ne touche donc pas a `last_event` : sinon la
+          recompense de ce pas deviendrait celle d'un evenement "timeout",
+          c'est-a-dire une prime pour avoir atteint la limite.
+        """
+        self.alive = False
+        self.truncated = True
+        self.end_cause = TIMEOUT
 
     # -- vision -------------------------------------------------------
     def cell_char(self, cell):
