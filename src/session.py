@@ -12,8 +12,16 @@ sa direction. Interface attendue cote agent :
 """
 
 import random
+import statistics
+from collections import Counter
 
 from .environment import board as bd
+
+# Plafond de securite de la boucle de jeu. `Board` tronque deja les parties
+# qui tournent en rond ; ce garde-fou-la protege contre un bug qui laisserait
+# `alive` a vrai, cas ou la boucle ne rendrait jamais la main (et ou la suite
+# de tests se figerait au lieu d'echouer).
+MAX_STEPS_PER_SESSION = 1_000_000
 
 
 class SessionStats:
@@ -24,30 +32,69 @@ class SessionStats:
         self.max_length = 0
         self.max_steps = 0
         self.total_steps = 0
+        self.lengths = []
+        self.causes = Counter()
 
     def record(self, board):
         self.games += 1
         self.max_length = max(self.max_length, board.max_length)
         self.max_steps = max(self.max_steps, board.steps)
         self.total_steps += board.steps
+        self.lengths.append(board.max_length)
+        self.causes[board.end_cause] += 1
+
+    @property
+    def mean_length(self):
+        """Moyenne des longueurs maximales atteintes, une par partie.
+
+        Ce n'est pas la longueur moyenne instantanee : c'est la moyenne des
+        records de chaque partie. C'est la vraie mesure de progression, le
+        maximum global etant surtout de la chance.
+        """
+        return statistics.fmean(self.lengths) if self.lengths else 0.0
+
+    @property
+    def median_length(self):
+        return statistics.median(self.lengths) if self.lengths else 0.0
 
     def summary(self):
         mean = self.total_steps / self.games if self.games else 0.0
         return (
-            "{} sessions — longueur maximale = {}, duree maximale = {}, "
-            "duree moyenne = {:.1f}".format(
-                self.games, self.max_length, self.max_steps, mean
+            "{} sessions — longueur : moyenne = {:.2f}, mediane = {}, "
+            "maximale = {} | duree : moyenne = {:.1f}, maximale = {}".format(
+                self.games, self.mean_length, self.median_length,
+                self.max_length, mean, self.max_steps
             )
         )
 
+    def causes_summary(self):
+        """Repartition des fins de partie : dit quoi corriger en priorite."""
+        total = sum(self.causes.values())
+        if not total:
+            return "causes de fin : aucune partie enregistree"
+        parts = [
+            "{} = {} ({:.0f} %)".format(
+                bd.END_CAUSE_LABELS.get(cause, cause), count,
+                100.0 * count / total
+            )
+            for cause, count in self.causes.most_common()
+        ]
+        return "causes de fin : " + ", ".join(parts)
 
-def play_session(board, agent=None, reward_fn=None, trace=False,
-                 max_idle=None):
-    """Joue une partie complete et retourne l'evenement de fin."""
-    idle = 0
-    limit = max_idle or board.size * board.size * 4
-    event = None
-    while board.alive:
+
+def play_session(board, agent=None, reward_fn=None, trace=False):
+    """Joue une partie complete et retourne la cause de fin.
+
+    Deux notions distinctes circulent ici, et les confondre est le bug que
+    tout ce decoupage sert a eviter :
+
+    - `event` est l'evenement de jeu du pas (deplacement, pomme, mort). Il
+      determine la RECOMPENSE. Une troncature ne le modifie pas : le pas qui
+      atteint la limite est un deplacement ordinaire et garde son cout.
+    - `board.dead` dit s'il existe un apres. Il determine le BOOTSTRAP. Il
+      est faux sur une troncature, car le serpent etait vivant.
+    """
+    while board.alive and board.steps < MAX_STEPS_PER_SESSION:
         vision = board.vision_chars()
         action = agent.choose(vision) if agent else board.direction
         event = board.step(action)
@@ -55,20 +102,20 @@ def play_session(board, agent=None, reward_fn=None, trace=False,
         if agent is not None and reward_fn is not None:
             learn = getattr(agent, "learn", None)
             if learn is not None:
-                done = not board.alive
-                after = board.vision_chars() if board.alive else vision
-                learn(vision, action, reward_fn(event), after, done)
+                after = vision if board.dead else board.vision_chars()
+                learn(vision, action, reward_fn(event), after, board.dead)
 
-        idle = 0 if event in (bd.GREEN, bd.RED) else idle + 1
         if trace:
             for line in board.vision_lines():
                 print(line)
             print("Action : {}".format(bd.ACTION_NAMES.get(action, "?")))
-        if idle >= limit:
-            board.alive = False
-            board.last_event = bd.STARVE
-            event = bd.STARVE
-    return event
+
+    if board.alive:
+        # Plafond atteint : le plateau n'a pas termine la partie lui-meme.
+        # On la termine proprement, sinon `end_cause` resterait a None et une
+        # partie finie sans cause casserait les statistiques.
+        board.truncate()
+    return board.end_cause
 
 
 def run_sessions(config, agent=None, reward_fn=None):
@@ -88,6 +135,7 @@ def run_sessions(config, agent=None, reward_fn=None):
         )
 
     print(stats.summary())
+    print(stats.causes_summary())
     if config.save_path:
         save = getattr(agent, "save", None)
         if save is None:
