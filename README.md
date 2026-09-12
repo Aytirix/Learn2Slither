@@ -3,9 +3,23 @@
 Un serpent qui apprend à survivre par essais et erreurs, sur un plateau 10×10,
 en ne voyant que les quatre directions depuis sa tête.
 
+> **Le cours de référence est `IA.md`.**
+>
+> Toute la partie apprentissage par renforcement de ce fichier — **§4 à §15,
+> glossaire compris** — est une version antérieure, **obsolète dans son
+> ensemble**. Ne t'y fie sur aucun point : elle diverge de `IA.md` sur
+> l'espace d'actions, l'encodage de l'état, la troncature, le barème de
+> récompenses, le reward shaping, la décroissance d'epsilon, le taux
+> d'apprentissage, l'initialisation de la table, le format de modèle, la
+> priorité des variantes, et elle ignore le rejeu inverse.
+>
+> Aucune énumération ne sera tenue à jour ici : en cas de désaccord, même
+> sur un détail, **`IA.md` fait foi**. Ces sections seront supprimées.
+
 Ce README sert deux publics : celui qui veut **lancer le projet** (§1 à §3) et
-celui qui veut **comprendre et écrire l'agent** (§4 à §14). La partie
-apprentissage par renforcement est volontairement détaillée pas à pas : elle
+celui qui veut **comprendre et écrire l'agent** (§4 et au-delà — voir
+l'avertissement ci-dessus : cette partie est obsolète, `IA.md` la remplace).
+La partie apprentissage par renforcement y est détaillée pas à pas : elle
 contient les formules, leur explication terme par terme, les variantes, et un
 plan d'implémentation. Le code de l'agent n'y est pas écrit — c'est le travail
 à faire.
@@ -53,7 +67,13 @@ utilise `python3`.
 Vérification de la norme (le sujet impose flake8 pour un projet Python) :
 
 ```bash
-.venv/bin/flake8 main.py src/
+.venv/bin/flake8 main.py src/ tests/
+```
+
+Suite de tests — `unittest` de la bibliothèque standard, rien à installer :
+
+```bash
+.venv/bin/python -m unittest discover -s tests -t .
 ```
 
 ### Le lobby
@@ -110,10 +130,11 @@ Les options suivent le format du sujet (simple tiret, nom complet).
 | `-seed N` | graine aléatoire, pour des runs reproductibles |
 | `-pilot ia\|joueur` | pilote présélectionné |
 | `-lobby on\|off` | force ou non le passage par le lobby |
+| `-baseline random` | agent de référence sans apprentissage, pour comparer |
 
 Le lobby s'ouvre par défaut, **sauf** si la ligne de commande décrit déjà
-la run (`-sessions`, `-load`, `-save`, `-dontlearn`, `-step-by-step`, ou
-`-visual off`).
+la run : `-sessions` avec une valeur autre que 1, `-load`, `-save`,
+`-dontlearn`, `-step-by-step`, `-baseline`, ou `-visual off`.
 
 **Le mode `-visual off` n'importe pas pygame du tout.** Il enchaîne les
 parties en pur Python, ce qui rend l'entraînement massif praticable (l'ordre
@@ -127,12 +148,14 @@ parties courtes ; des parties plus longues coûtent proportionnellement plus).
 ```
 snake                      lanceur shell (./snake -sessions ...)
 main.py                    point d'entrée : dispatch headless / graphique
+sujet/                     énoncé du projet (PDF, fr et en)
 models/                    modèles entraînés (à produire)
 src/
 ├── cli.py                 arguments du sujet
 ├── config.py              GameConfig : réglages d'une session
 ├── models.py              recensement des fichiers de models/
-├── session.py             enchaînement des parties sans affichage
+├── baselines.py           agents de référence sans apprentissage
+├── session.py             enchaînement des parties, statistiques
 ├── environment/
 │   └── board.py           plateau, règles, vision
 ├── agent/                 ← À CRÉER : votre agent
@@ -147,20 +170,49 @@ src/
     ├── lobby.py           écran de configuration
     ├── game.py            état d'une partie, tempo, effets
     └── loop.py            boucle pygame, machine à états lobby ⇄ partie
+tests/                     suite unittest (bibliothèque standard)
+├── helpers.py             plateaux de test, agent espion, barème
+├── test_board.py          vision, collisions, pommes, mort, troncature
+├── test_session.py        contrat d'apprentissage, statistiques, baselines
+└── test_cli.py            traduction des arguments en configuration
 ```
 
 ### Les points d'accroche de l'agent
 
-Tout est déjà branché ; il ne manque que l'objet agent lui-même.
+L'environnement, l'affichage et la ligne de commande sont en place. **Quatre
+branchements manquent encore**, en plus de l'agent lui-même :
+
+- `-load` ne charge aucun modèle ;
+- `-dontlearn` n'est lu par personne ;
+- aucune fonction de récompense n'existe, donc `learn()` n'est pas encore
+  appelé depuis le point d'entrée ;
+- `-save` n'est câblé que dans le chemin headless : `src/interface/` ne
+  contient aucun appel à `save`, donc `-visual on -save f` n'écrira rien.
+
+C'est le travail de l'étape 3 de `IA.md` §12.
 
 ```python
 # ce que l'environnement fournit
 board.vision_chars()   # {direction: "SS0G0W", ...} — LE seul état autorisé
-board.step(direction)  # -> "move" | "green" | "red" | "wall" | "body" | "starve"
+board.step(direction)  # évènement du PAS : "move" | "green" | "red"
+                       #                  | "wall" | "body" | "starve"
+                       # hors board.DIRECTIONS -> ValueError (si alive)
+
+# la fin de partie ne se lit PAS dans la valeur de retour de step()
 board.alive            # False dès que la partie est finie
+board.end_cause        # None, ou "wall"|"body"|"starve"|"timeout"
+board.dead             # True seulement pour une VRAIE mort
+board.truncated        # True si la partie a été coupée (trop de pas sans pomme)
+
 board.max_length       # longueur maximale atteinte
 board.steps            # durée de la partie
 ```
+
+**`board.dead` est ce qu'il faut passer à `learn()`, jamais `not board.alive`.**
+Une partie tronquée n'est pas une mort : le serpent était vivant, donc son état
+suivant a une valeur et l'agent doit continuer à bootstrapper. Et le pas qui a
+déclenché la troncature reste un `"move"`, avec son coût normal. `IA.md` §4.5
+et §7.2 détaillent le piège.
 
 ```python
 # ce que le projet attend de votre agent
@@ -418,8 +470,12 @@ le nombre de pas écoulés. Le sujet sanctionne d'un `-42`.
 
 Utiliser la concaténation des quatre chaînes comme clé.
 
-- Nombre d'états : chaque rayon fait jusqu'à 9 cases, 5 symboles possibles,
-  quatre rayons → de l'ordre de `5³⁶ ≈ 10²⁵`.
+- Nombre d'états : la croix de vision compte **18 cases** au total sur un
+  plateau 10×10 — les quatre rayons se partagent une ligne et une colonne, ils
+  ne peuvent pas faire 9 cases chacun simultanément. Chacune peut valoir
+  4 symboles utiles (`S`, `G`, `R`, `0` — `W` n'apparaît qu'au bout du rayon,
+  `H` seulement au centre), soit une borne de `4¹⁸ ≈ 6,9·10¹⁰` (et non `5³⁶`,
+  qui surestime d'un facteur supérieur à 10¹⁴). Voir `IA.md` §6.2.
 - Verdict : **inutilisable**. La table ne se remplira jamais ; l'agent
   rencontrera presque toujours un état inédit. Et une table entraînée en
   10×10 serait inexploitable en 20×20.
@@ -467,7 +523,7 @@ prototype qui marche en une soirée**, à raffiner ensuite.
 
 | Option | États | Vitesse d'apprentissage | Plafond de performance |
 |---|---|---|---|
-| A — vision brute | ~10²⁵ | jamais | nul |
+| A — vision brute | ~7·10¹⁰ | jamais | nul |
 | B — symbole + distance | ~2·10⁴ | quelques milliers de sessions | élevé |
 | C — binaire | 4 096 | quelques centaines | moyen |
 
@@ -515,10 +571,13 @@ shaping petit devant la récompense terminale.
 #### La boucle infinie
 
 Un agent peut apprendre à survivre sans jamais manger — c'est un optimum
-local parfaitement rationnel si mourir coûte très cher. Ajoutez un compteur de
-pas depuis la dernière pomme (par exemple `100 × longueur`, ou
-`4 × taille²`) : au-delà, la partie s'arrête. `src/session.py` implémente déjà
-ce garde-fou.
+local parfaitement rationnel si mourir coûte très cher. Un compteur de pas
+depuis la dernière pomme arrête la partie au-delà d'une limite.
+
+Ce garde-fou est implémenté dans **`src/environment/board.py`** (`IDLE_FACTOR`,
+`idle_limit`, `_truncate`), et la valeur retenue est **`4 × taille²`** — voir
+`IA.md` §7.5 pour la mesure qui justifie de la lier à l'aire du plateau et non
+à la longueur du serpent.
 
 ---
 
@@ -946,7 +1005,8 @@ traîne dans votre code, et toutes vos comparaisons sont sans valeur.
 
 ### La checklist
 
-- [ ] `flake8 main.py src/` sans erreur
+- [ ] `flake8 main.py src/ tests/` sans erreur
+- [ ] `python -m unittest discover -s tests -t .` — tous les tests passent
 - [ ] `git clone` dans un dossier vide, installation, lancement — ça marche
 - [ ] plateau 10×10, 2 pommes vertes, 1 rouge, serpent de 3 cases
 - [ ] mort : mur, queue, longueur nulle
