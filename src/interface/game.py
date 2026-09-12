@@ -204,7 +204,7 @@ class Game:
         self.best_length = max(self.best_length, self.board.max_length)
         if self.trace:
             self._print_state(direction, event)
-        if event in bd.DEATH_EVENTS:
+        if self.board.end_cause is not None:
             print(
                 "Fin de la partie, longueur maximale = {}, "
                 "duree maximale = {}".format(

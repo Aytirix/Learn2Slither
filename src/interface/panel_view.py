@@ -32,6 +32,19 @@ def hints_for(game):
     return HINTS
 
 
+def etat_de_partie(board):
+    """Libelle et couleur de l'etat du plateau.
+
+    Trois etats et non deux : une partie tronquee n'est pas une mort, le
+    serpent etait vivant quand on a coupe le chrono.
+    """
+    if board.alive:
+        return "EN VIE", theme.GREEN_APPLE
+    if board.truncated:
+        return "INTERROMPU", theme.ACCENT
+    return "MORT", theme.RED_APPLE
+
+
 class PanelView:
     """Colonne de droite, dessinee directement sur l'ecran."""
 
@@ -107,18 +120,15 @@ class PanelView:
         return y + height + 12
 
     def _footer(self, game, x, y):
-        alive = game.board.alive
+        board = game.board
+        etat, couleur = etat_de_partie(board)
         rows = (
             (
                 "DERNIERE ACTION",
                 bd.ACTION_NAMES.get(game.board.direction, "-"),
                 theme.ACCENT,
             ),
-            (
-                "ETAT",
-                "EN VIE" if alive else "MORT",
-                theme.GREEN_APPLE if alive else theme.RED_APPLE,
-            ),
+            ("ETAT", etat, couleur),
         )
         for label, value, color in rows:
             lab = self.fonts["label"].render(label, True, theme.TEXT_MUTED)

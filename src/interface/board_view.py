@@ -9,10 +9,11 @@ from . import gfx, theme
 
 PAD = 16
 
-DEATH_LABELS = {
-    bd.WALL: "COLLISION AVEC UN MUR",
-    bd.BODY: "COLLISION AVEC LA QUEUE",
-    bd.STARVE: "LONGUEUR NULLE",
+# Libelles d'affichage derives de la source unique de `board`. Le nom evite
+# "DEATH" a dessein : une troncature n'est pas une mort.
+END_CAUSE_LABELS = {
+    cause: label.upper()
+    for cause, label in bd.END_CAUSE_LABELS.items()
 }
 
 
@@ -208,11 +209,13 @@ class BoardView:
         overlay.fill((6, 8, 18, 190))
         self.surf.blit(overlay, (0, 0))
         cx = theme.BOARD_PX // 2
-        label = DEATH_LABELS.get(board.last_event, "FIN DE PARTIE")
+        label = END_CAUSE_LABELS.get(board.end_cause, "FIN DE PARTIE")
+        # Une interruption n'est pas une mort : pas de rouge.
+        label_color = theme.ACCENT if board.truncated else theme.RED_APPLE
         rows = (
             (self.fonts["big"].render(
                 "FIN DE PARTIE", True, theme.TEXT), 250),
-            (self.fonts["mono"].render(label, True, theme.RED_APPLE), 310),
+            (self.fonts["mono"].render(label, True, label_color), 310),
             (self.fonts["mono"].render(
                 "longueur max = {}   duree max = {}".format(
                     board.max_length, board.steps
