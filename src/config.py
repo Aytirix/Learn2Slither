@@ -14,7 +14,7 @@ class GameConfig:
 
     def __init__(self, pilot=PILOT_AI, model=None, size=10, speed=6.0,
                  seed=None, sessions=1, save_path=None, visual=True,
-                 learn=True, step_by_step=False, trace=True):
+                 learn=True, step_by_step=False, trace=True, baseline=None):
         self.pilot = pilot if pilot in PILOTS else PILOT_AI
         self.model = model
         self.size = max(MIN_SIZE, min(MAX_SIZE, size))
@@ -26,6 +26,7 @@ class GameConfig:
         self.learn = learn
         self.step_by_step = step_by_step
         self.trace = trace
+        self.baseline = baseline
 
     @property
     def ai_driven(self):

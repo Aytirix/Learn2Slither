@@ -8,6 +8,7 @@ Exemples du sujet :
 
 import argparse
 
+from . import baselines
 from . import config as cfg
 
 ON = "on"
@@ -66,6 +67,10 @@ def build_parser():
         "-lobby", choices=(ON, OFF), default=None,
         help="forcer ou non le passage par le lobby",
     )
+    extra.add_argument(
+        "-baseline", choices=tuple(baselines.BASELINES), default=None,
+        help="agent de reference sans apprentissage, pour comparer",
+    )
     return parser
 
 
@@ -88,6 +93,7 @@ def build_config(args):
         learn=not args.dontlearn,
         step_by_step=args.step_by_step,
         trace=args.verbose if not visual else True,
+        baseline=args.baseline,
     )
 
 
@@ -103,4 +109,5 @@ def wants_lobby(args):
         or args.save
         or args.dontlearn
         or args.step_by_step
+        or args.baseline
     )
