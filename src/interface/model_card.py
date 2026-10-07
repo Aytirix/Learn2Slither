@@ -11,10 +11,9 @@ from . import gfx, theme, widgets
 ETATS_POSSIBLES = (4 * it.DISTANCE_MAX) ** 3
 
 DESCRIPTION = (
-    "Q-learning tabulaire. A chaque pas, le serpent resume",
-    "sa croix de vision en 3 rayons (devant, gauche, droite :",
-    "premiere chose vue + distance jusqu'a 3), puis choisit",
-    "tout droit, gauche ou droite selon les notes de sa table.",
+    "Q-learning tabulaire : sa croix de vision est resumee en",
+    "3 rayons (devant, gauche, droite), puis il choisit tout",
+    "droit, gauche ou droite selon les notes de sa table.",
 )
 
 LIGNE_H = 52
@@ -41,6 +40,7 @@ def lignes_details(infos):
         ("GAMMA (poids du futur)", "{:g}".format(infos.gamma)),
         ("EPSILON MINIMAL", "{:g}".format(infos.epsilon_min)),
         ("PAS CIBLE (fin exploration)", entier(infos.pas_cible)),
+        ("VALEUR INITIALE", "{:g}".format(infos.valeur_initiale)),
         ("ALPHA", "1 / n^0.7"),
         ("FICHIER", "{}  ({:.0f} ko)".format(infos.chemin,
                                              infos.octets / 1024)),

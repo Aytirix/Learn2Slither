@@ -128,8 +128,11 @@ def _toujours():
 class Reglage:
     """Valeur reglee avec < et > (ou les fleches gauche et droite)."""
 
-    def __init__(self, label, lire, changer, actif=_toujours):
+    def __init__(self, label, lire, changer, actif=_toujours, aide=""):
         self.label = label
+        # Explication courte sous le libelle : texte, ou fonction qui la
+        # calcule d'apres la valeur courante.
+        self.aide = aide
         self.lire = lire
         self.changer = changer
         self.actif = actif
@@ -165,8 +168,10 @@ class Lien:
 class Saisie:
     """Texte libre tape au clavier (ex. : nom d'un nouveau modele)."""
 
-    def __init__(self, label, valeur="", longueur_max=32, indice=""):
+    def __init__(self, label, valeur="", longueur_max=32, indice="",
+                 aide=""):
         self.label = label
+        self.aide = aide
         self.valeur = valeur
         self.longueur_max = longueur_max
         self.indice = indice
@@ -331,8 +336,19 @@ class Formulaire:
                  theme.ACCENT if focus else theme.BORDER, 12,
                  2 if focus else 1)
         couleur = theme.TEXT_DIM if actif else theme.TEXT_MUTED
-        texte(screen, self.fonts["label"], champ.label,
-              (rect.x + 18, rect.centery - 7), couleur)
+        aide = getattr(champ, "aide", "")
+        if callable(aide):
+            # Aide calculee d'apres la valeur choisie (ex. : gamma).
+            aide = aide()
+        if aide:
+            # Libelle au-dessus, explication en petit juste en dessous.
+            texte(screen, self.fonts["label"], champ.label,
+                  (rect.x + 18, rect.centery - 17), couleur)
+            texte(screen, self.fonts["label"], aide,
+                  (rect.x + 18, rect.centery + 3), theme.TEXT_MUTED)
+        else:
+            texte(screen, self.fonts["label"], champ.label,
+                  (rect.x + 18, rect.centery - 7), couleur)
 
         if isinstance(champ, Pilules):
             self._pilules(screen, rect, index, champ)

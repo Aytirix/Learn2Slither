@@ -58,6 +58,7 @@ class Infos:
         self.gamma = agent.gamma if agent else 0.0
         self.epsilon_min = agent.epsilon_min if agent else 0.0
         self.pas_cible = agent.pas_cible if agent else 0
+        self.valeur_initiale = agent.q.valeur_initiale if agent else 0.0
         try:
             self.octets = os.path.getsize(chemin)
         except OSError:

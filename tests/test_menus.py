@@ -288,6 +288,27 @@ class TestPartieEvaluation(unittest.TestCase):
         self.assertTrue(game.fini)
 
 
+class TestAidesDesParametres(unittest.TestCase):
+    def test_gamma(self):
+        from src.interface.training_view import aide_gamma
+        self.assertIn("~20 coups", aide_gamma(0.95))
+        self.assertIn("~5 coups", aide_gamma(0.8))
+        self.assertIn("~100 coups", aide_gamma(0.99))
+        self.assertIn("coup present", aide_gamma(0.0))
+
+    def test_epsilon_min(self):
+        from src.interface.training_view import aide_epsilon_min
+        self.assertIn("1 coup sur 100", aide_epsilon_min(0.01))
+        self.assertIn("1 coup sur 20", aide_epsilon_min(0.05))
+        self.assertIn("50 %", aide_epsilon_min(0.5))
+        self.assertIn("aucun hasard", aide_epsilon_min(0.0))
+        self.assertIn("toujours", aide_epsilon_min(1.0))
+
+    def test_gamma_jamais_a_1(self):
+        from src.interface.training_view import GAMMAS
+        self.assertLess(max(GAMMAS), 1.0)
+
+
 # -- Panneau ------------------------------------------------------------------
 
 class TestRecadrage(unittest.TestCase):
@@ -433,7 +454,7 @@ class TestApplication(DossierModeles):
         touche(self.app, pygame.K_n)
         self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
                                                  text="neuf"))
-        touche(self.app, pygame.K_DOWN, 5)          # PARTIES A JOUER
+        touche(self.app, pygame.K_DOWN, 6)          # PARTIES A JOUER
         touche(self.app, pygame.K_LEFT, 10)         # au minimum : 10
         touche(self.app, pygame.K_RETURN)
         self.assertEqual(self.app.training.vue, "en_cours")
@@ -443,6 +464,34 @@ class TestApplication(DossierModeles):
                 break
         self.assertEqual(modele.charger("models/neuf.txt").parties, 10)
         self.assertIn("sauvegarde", self.app.training.message)
+
+    def test_hyperparametres_du_nouveau_modele(self):
+        """GAMMA au plus bas, EPSILON MIN au plus haut, VALEUR INITIALE
+        a 0 : le modele cree les garde dans son fichier."""
+        touche(self.app, pygame.K_DOWN)
+        touche(self.app, pygame.K_RETURN)
+        touche(self.app, pygame.K_n)
+        self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
+                                                 text="regle"))
+        touche(self.app, pygame.K_DOWN)             # GAMMA
+        touche(self.app, pygame.K_LEFT, 30)
+        touche(self.app, pygame.K_DOWN)             # EPSILON MINIMAL
+        touche(self.app, pygame.K_RIGHT, 30)
+        touche(self.app, pygame.K_DOWN, 2)          # VALEUR INITIALE
+        touche(self.app, pygame.K_LEFT, 2)          # 1 -> 0.5 -> 0
+        touche(self.app, pygame.K_DOWN, 2)          # PARTIES A JOUER
+        touche(self.app, pygame.K_LEFT, 10)
+        self.image()
+        touche(self.app, pygame.K_RETURN)
+        for _ in range(500):
+            self.image()
+            if self.app.training.vue != "en_cours":
+                break
+        agent = modele.charger("models/regle.txt")
+        self.assertEqual((agent.gamma, agent.epsilon_min,
+                          agent.q.valeur_initiale), (0.0, 1.0, 0.0))
+        self.assertEqual(models.infos("models/regle.txt").valeur_initiale,
+                         0.0)
 
     def test_nom_deja_pris_refuse(self):
         touche(self.app, pygame.K_DOWN)
@@ -474,7 +523,7 @@ class TestApplication(DossierModeles):
         touche(self.app, pygame.K_n)
         self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
                                                  text="coupe"))
-        touche(self.app, pygame.K_DOWN, 5)
+        touche(self.app, pygame.K_DOWN, 6)
         touche(self.app, pygame.K_RIGHT, 20)
         touche(self.app, pygame.K_RETURN)
         self.image(2)

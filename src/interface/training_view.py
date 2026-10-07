@@ -16,9 +16,10 @@ from .. import config as cfg
 from .. import models
 from ..agent import agent as ag
 from ..agent import modele
+from ..agent import qtable as qt
 from ..training import Entrainement
 from . import gfx, theme, widgets
-from .model_card import ListeModeles, carte_details, entier
+from .model_card import ListeModeles, carte_details, entier, parties
 
 LISTE = "liste"
 NOUVEAU = "nouveau"
@@ -31,13 +32,26 @@ RETOUR_MENU = "menu"
 # avancer vite, assez peu pour que la fenetre reste fluide (60 images/s).
 BUDGET_S = 0.025
 
-GAMMAS = (0.8, 0.85, 0.9, 0.95, 0.97, 0.99)
-EPSILONS_MIN = (0.0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1)
+# gamma reste strictement sous 1 : a 1, le futur compterait sans fin et
+# les notes pourraient grandir sans limite.
+GAMMAS = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95,
+          0.97, 0.98, 0.99)
+EPSILONS_MIN = (0.0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5,
+                0.75, 1.0)
+VALEURS_INITIALES = (-50, -20, -10, -5, -1, 0, 0.5, 1, 2, 5, 10, 20, 50)
 PAS_CIBLES = (1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000)
 # Parties a ajouter : 10, 20, 50, 100, 200, 500... jusqu'a un million.
 AJOUTS = tuple(base * 10 ** e for e in range(1, 6) for base in (1, 2, 5)) \
     + (1_000_000,)
 AJOUT_DEFAUT = 1_000
+
+# Explications courtes affichees sous chaque parametre (IA.md pour le
+# detail). epsilon = probabilite de jouer au hasard : il part de 1 (tout au
+# hasard) et descend en ligne droite jusqu'a son minimum en PAS CIBLE pas.
+AIDE_VALEUR_INITIALE = "note d'un coup inconnu (haut = explore)"
+AIDE_PAS_CIBLE = "pas pour passer de 100 % hasard au minimum"
+AIDE_PLATEAU = "cote du plateau pendant l'entrainement"
+AIDE_PARTIES = "nombre de parties d'entrainement a jouer"
 
 HINTS_LISTE = (
     "HAUT / BAS  selectionner   ·   ENTREE / C  continuer l'entrainement",
@@ -48,6 +62,25 @@ HINTS_FORMULAIRE = (
     "ECHAP  retour a la liste",
 )
 HINTS_EN_COURS = ("ECHAP  ·  ESPACE  ·  ARRETER : arrete et sauvegarde",)
+
+
+def aide_gamma(gamma):
+    """Horizon de l'agent : il raisonne sur environ 1 / (1 - gamma) coups."""
+    if gamma == 0:
+        return "0 = ne pense qu'au coup present"
+    return "{:g} = pense a ~{:.0f} coups".format(gamma, 1 / (1 - gamma))
+
+
+def aide_epsilon_min(epsilon):
+    """Part de hasard qui reste une fois l'exploration terminee."""
+    if epsilon == 0:
+        return "0 = plus aucun hasard une fois entraine"
+    if epsilon == 1:
+        return "1 = joue toujours au hasard"
+    if epsilon >= 0.1:
+        return "{:g} = {:.0f} % des coups au hasard".format(
+            epsilon, 100 * epsilon)
+    return "{:g} = 1 coup sur {:.0f} au hasard".format(epsilon, 1 / epsilon)
 
 
 class Choix:
@@ -96,30 +129,40 @@ class TrainingScreen:
     def _ouvrir_nouveau(self):
         self.message = ""
         self.nom = widgets.Saisie("NOM", indice="ex : mon_modele",
-                                  longueur_max=models.NOM_MAX)
+                                  longueur_max=models.NOM_MAX,
+                                  aide="fichier models/<nom>.txt")
         self.gamma = Choix(GAMMAS, ag.GAMMA)
         self.epsilon_min = Choix(EPSILONS_MIN, ag.EPSILON_MIN)
         self.pas_cible = Choix(PAS_CIBLES, ag.PAS_CIBLE)
+        self.valeur_initiale = Choix(VALEURS_INITIALES,
+                                     qt.VALEUR_INITIALE)
         self.taille = Choix(tuple(range(cfg.MIN_SIZE, cfg.MAX_SIZE + 1)), 10)
         self.ajout = Choix(AJOUTS, AJOUT_DEFAUT)
         champs = [
             self.nom,
-            widgets.Reglage("GAMMA (poids du futur)",
+            widgets.Reglage("GAMMA",
                             lambda: "{:g}".format(self.gamma.valeur),
-                            self.gamma.changer),
+                            self.gamma.changer,
+                            aide=lambda: aide_gamma(self.gamma.valeur)),
             widgets.Reglage("EPSILON MINIMAL",
                             lambda: "{:g}".format(self.epsilon_min.valeur),
-                            self.epsilon_min.changer),
-            widgets.Reglage("PAS CIBLE (fin exploration)",
+                            self.epsilon_min.changer,
+                            aide=lambda: aide_epsilon_min(
+                                self.epsilon_min.valeur)),
+            widgets.Reglage("PAS CIBLE",
                             lambda: entier(self.pas_cible.valeur),
-                            self.pas_cible.changer),
+                            self.pas_cible.changer, aide=AIDE_PAS_CIBLE),
+            widgets.Reglage("VALEUR INITIALE",
+                            lambda: "{:g}".format(self.valeur_initiale.valeur),
+                            self.valeur_initiale.changer,
+                            aide=AIDE_VALEUR_INITIALE),
             self._champ_taille(),
             widgets.Reglage("PARTIES A JOUER",
                             lambda: entier(self.ajout.valeur),
-                            self.ajout.changer),
+                            self.ajout.changer, aide=AIDE_PARTIES),
         ]
         self.formulaire = widgets.Formulaire(
-            self.fonts, champs, "CREER ET ENTRAINER", y=150,
+            self.fonts, champs, "CREER ET ENTRAINER", y=125,
             hauteur_ligne=52)
         self.vue = NOUVEAU
 
@@ -138,13 +181,15 @@ class TrainingScreen:
         champs = [
             # Ligne d'information : actif=False, on ne peut pas la regler.
             widgets.Reglage("DEJA ENTRAINE", lambda: entier(depart),
-                            None, actif=lambda: False),
+                            None, actif=lambda: False,
+                            aide="parties deja jouees par ce modele"),
             widgets.Reglage(
                 "MONTER JUSQU'A",
                 lambda: "{}  (+{})".format(
                     entier(depart + self.ajout.valeur),
                     entier(self.ajout.valeur)),
-                self.ajout.changer),
+                self.ajout.changer,
+                aide="total de parties a atteindre"),
             self._champ_taille(),
         ]
         self.formulaire = widgets.Formulaire(
@@ -155,7 +200,7 @@ class TrainingScreen:
         return widgets.Reglage(
             "PLATEAU D'ENTRAINEMENT",
             lambda: "{0} x {0}".format(self.taille.valeur),
-            self.taille.changer)
+            self.taille.changer, aide=AIDE_PLATEAU)
 
     def _dire(self, message, ok=True):
         self.message = message
@@ -168,9 +213,11 @@ class TrainingScreen:
         if probleme:
             self.formulaire.message = probleme
             return
-        agent = ag.Agent(rng=random.Random(), gamma=self.gamma.valeur,
-                         epsilon_min=self.epsilon_min.valeur,
-                         pas_cible=self.pas_cible.valeur)
+        agent = ag.Agent(
+            rng=random.Random(), gamma=self.gamma.valeur,
+            epsilon_min=self.epsilon_min.valeur,
+            pas_cible=self.pas_cible.valeur,
+            qtable=qt.QTable(valeur_initiale=self.valeur_initiale.valeur))
         self._lancer(agent, models.chemin_nouveau(nom))
 
     def _lancer_continuer(self):
@@ -311,12 +358,12 @@ class TrainingScreen:
             infos = self.liste.choisi
             widgets.titre(
                 screen, self.fonts, "CONTINUER",
-                "{}  ·  DEJA {} PARTIES  ·  GAMMA {:g}  ·  PAS CIBLE {}"
-                .format(infos.nom.upper(), entier(infos.parties),
+                "{}  ·  DEJA {}  ·  GAMMA {:g}  ·  PAS CIBLE {}"
+                .format(infos.nom.upper(), parties(infos.parties).upper(),
                         infos.gamma, entier(infos.pas_cible)), y=60)
         self.formulaire.render(screen, self.time_s)
         widgets.aide(screen, self.fonts["label"], HINTS_FORMULAIRE,
-                     self.formulaire.bas + 50)
+                     self.formulaire.bas + 40)
 
     def _render_en_cours(self, screen):
         run = self.entrainement
