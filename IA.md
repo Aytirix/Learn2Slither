@@ -706,6 +706,74 @@ La phrase juste est donc : **aucune politique sans mémoire ne franchit ce mur.*
 
 Dès 1 000 parties, le serpent meurt surtout **contre son propre corps** : c'est exactement la signature de l'observabilité partielle. Il ne voit pas la forme globale de son corps, donc il s'enferme. Le plafond n'est pas un manque d'entraînement : il est dans l'encodage.
 
+#### Ce qui a été essayé pour dépasser ce plafond
+
+Avant de conclure que la limite vient de la vision, il fallait vérifier qu'elle ne venait pas des réglages ou de la façon d'apprendre. Chaque piste a été mesurée avec le même protocole : un agent neuf, entraîné 3 000 parties, 4 graines différentes, puis évalué figé sur 200 parties.
+
+**D'abord, plus d'entraînement.** Le modèle `infini.txt` a été entraîné 3 429 783 parties en partant de `10000sess.txt`. Il passe de 26,6 à 28,4 de longueur moyenne (sur 1 000 parties) : +7 % pour 340 fois plus d'entraînement. Après 3,4 millions de parties, sa table ne contient que 1 368 situations, et 100 % de ses morts sont contre son corps.
+
+**Ensuite, des réglages et des façons d'apprendre :**
+
+| Piste | Ce qu'elle change | Moyenne | Écart-type |
+|---|---|---|---|
+| **référence (code livré)** | — | **29,2** | 5,0 |
+| γ = 0,97 | l'agent regarde plus loin dans le futur | 26,2 | 5,1 |
+| γ = 0,99 | encore plus loin | 25,1 | 4,4 |
+| distances jusqu'à 4 | voir un palier de plus (§6.5) | 26,7 | 2,3 |
+| distances jusqu'à 5 | deux paliers de plus | 26,3 | 1,8 |
+| mémoire de la dernière action | l'état contient le coup précédent | 25,6 | 1,8 |
+| obstacle derrière une pomme | voir le mur ou le corps caché par une pomme | 27,2 | 2,0 |
+| malus remonté sur 3 coups | retour à n pas, n = 3 | 25,4 | 0,4 |
+| malus remonté sur 6 coups | n = 6 | 23,9 | 1,0 |
+| malus remonté sur 10 coups | n = 10 | 23,5 | 0,9 |
+| malus remonté sur toute la partie | Monte-Carlo | 26,9 | 3,4 |
+
+Une précision sur la référence : elle profite d'une graine chanceuse (36,0). Sans celle-ci, elle tourne autour de 27. **Aucune piste ne fait mieux.**
+
+**Pourquoi enrichir l'état ne paie pas ici.** Chaque information ajoutée multiplie le nombre de situations à apprendre : 2 790 états avec des distances jusqu'à 4, 4 751 jusqu'à 5, contre 1 268 pour la référence. Pour le même entraînement, chaque situation est vue moins souvent. Et l'information ajoutée ne dit toujours rien de ce qui tue vraiment : la forme du corps hors de la croix.
+
+**Pourquoi faire remonter le malus plus loin ne paie pas non plus.** L'intuition est séduisante : « je suis mort à cause d'un coup joué 6 pas plus tôt, punissons ce coup ». Mais pour l'agent, ce coup n'a pas été joué dans une *position* : il a été joué dans une *situation résumée*, par exemple « couloir libre devant, mur à 3 cases à gauche ». Il a rencontré cette même situation des milliers de fois, et la plupart du temps il n'en est pas mort ; cette fois-ci, c'est la forme de son corps, invisible, qui l'a tué. Punir ce coup revient donc à punir un coup généralement bon : l'agent apprend du bruit, et plus on remonte loin, plus c'est net (25,4 → 23,9 → 23,5).
+
+Le Q-learning classique est justement prudent sur ce point (§4.7) : il ne fait remonter une mauvaise nouvelle que lorsque **toutes** les options de la situation suivante sont mauvaises.
+
+#### Les pistes qui visent directement le problème : il s'enferme dans son corps
+
+Le serpent meurt parce qu'il joue « trop serré » : plus il grandit, plus il devrait jouer large, mais rien ne lui dit qu'il est long. Les pistes suivantes lui donnent cette information, **en restant dans la règle de vision** : tout est calculé depuis sa croix ou depuis la mémoire de ses propres coups.
+
+- **Tendance de virage (A)** : sur ses 8 derniers coups, combien de virages à gauche moins à droite, entre −3 et +3. Il sait qu'il est en train de s'enrouler en spirale, le motif typique de l'enfermement.
+- **Longueur comptée (C)** : il part de 3 cases (règle du sujet), et compte +1 quand il entre dans une pomme verte qu'il voyait juste devant lui, −1 pour une rouge. Uniquement depuis sa vision : ça fonctionne aussi en évaluation, où le sujet interdit de regarder les récompenses. Vérifié exact sur 10 368 pas. L'état reçoit une tranche : moins de 10, de 10 à 19, de 20 à 29, 30 et plus.
+- **Bonus d'espace libre (B)** : un shaping (§7.4) calculé sur la place libre visible devant, à gauche et à droite, avec le `γ`.
+- **Rembobinage** : à chaque mort, revenir 1 à 6 coups en arrière, essayer les deux autres actions, laisser jouer 30 coups, et apprendre de ces branches. Il donne plus d'exemples de fins de partie, celles où le serpent est long. Pendant une vraie partie, l'agent ne rembobine jamais et ne voit que sa croix.
+
+Protocole plus solide que le précédent : **12 graines**, évaluation figée sur **500 parties**, et comparaison graine par graine avec la référence.
+
+| Variante | 3 000 parties | 10 000 parties | 60 000 parties |
+|---|---|---|---|
+| **référence** | **28,1** | **29,1** | **29,6** |
+| A : tendance de virage | 23,9 | 26,6 | — |
+| C : longueur comptée | 25,2 | 28,7 | 29,7 |
+| A + C | 16,7 | 25,3 | 29,5 |
+| B : espace libre | 27,4 | 28,5 | — |
+
+Le rembobinage, comparé à un entraînement normal **au même nombre de pas** (sinon il gagne seulement parce qu'il s'entraîne plus) :
+
+| Rembobinage appliqué à | Normal, mêmes pas | Rembobiné | Écart | Graines gagnées |
+|---|---|---|---|---|
+| référence, 3 000 parties | 27,4 | 28,7 | +1,3 ± 0,9 | 7 / 12 |
+| référence, 10 000 parties | 29,1 | 29,1 | −0,0 ± 0,7 | 8 / 12 |
+| C, 10 000 parties | 28,1 | 29,3 | **+1,3 ± 0,5** | 9 / 12 |
+| A + C, 10 000 parties | 27,9 | 29,0 | **+1,2 ± 0,4** | 9 / 12 |
+
+**Ce qu'on en conclut.**
+
+- Enrichir l'état **ralentit d'abord l'apprentissage** : la table devient 3 à 17 fois plus grosse, il faut plus de parties pour la remplir. Avec assez d'entraînement, C et A + C **rattrapent** la référence (29,7 et 29,5 contre 29,6 à 60 000 parties), mais ne la dépassent pas. Elles deviennent en revanche deux fois plus régulières d'une graine à l'autre (écart-type 0,9 contre 2,1).
+- Le rembobinage **n'apporte rien à la référence** : à expérience égale, on obtient le même 29,1. Il **aide vraiment C et A + C**, qui manquent justement d'exemples de fins de partie : c'est le seul gain du projet qui dépasse nettement le bruit. Mais il les amène au même plafond, plus vite, sans le relever.
+- Le bonus d'espace libre ne change rien.
+
+Tout converge vers **environ 29,5**. Savoir qu'il est long, qu'il s'enroule, ou revivre ses fins de partie ne suffit pas : pour éviter de s'enfermer, il faudrait voir la **forme** de son corps, et la croix ne la montre pas.
+
+**À retenir pour la soutenance :** onze idées testées et mesurées, de la plus simple (régler γ) à la plus ambitieuse (lui donner sa longueur et sa tendance à s'enrouler, et lui faire revivre ses fins de partie). Aucune ne franchit le plafond de 29,5, et toutes l'expliquent de la même façon : la limite vient de ce que le serpent voit, pas de la façon dont il apprend. Pour aller plus loin, il faudrait lui montrer la forme de son corps, ce que la règle de vision du sujet interdit.
+
 ---
 
 ## Partie 7 — Concevoir les récompenses

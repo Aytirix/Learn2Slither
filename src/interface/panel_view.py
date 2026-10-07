@@ -27,6 +27,9 @@ HINTS = (
 
 def hints_for(game):
     """Aide clavier : les directions n'existent qu'en pilotage manuel."""
+    propres = getattr(game, "hints", None)
+    if propres is not None:
+        return propres
     if game.manual:
         return (MANUAL_HINT,) + HINTS
     return HINTS
@@ -43,6 +46,26 @@ def etat_de_partie(board):
     if board.truncated:
         return "INTERROMPU", theme.ACCENT
     return "MORT", theme.RED_APPLE
+
+
+def recadrer(lines, max_lignes, max_colonnes):
+    """Centre de la croix autour de la tete, si elle est trop grande.
+
+    Renvoie (lignes, recadree). La tete reste au milieu ; on coupe a
+    egale distance de chaque cote.
+    """
+    if len(lines) <= max_lignes and all(
+            len(line) <= max_colonnes for line in lines):
+        return lines, False
+    ligne_tete = next(
+        (i for i, line in enumerate(lines) if bd.HEAD_CHAR in line), 0)
+    colonne_tete = lines[ligne_tete].find(bd.HEAD_CHAR) if lines else 0
+    demi_h = (max_lignes - 1) // 2
+    demi_l = (max_colonnes - 1) // 2
+    haut = max(0, min(ligne_tete - demi_h, len(lines) - max_lignes))
+    gauche = max(0, colonne_tete - demi_l)
+    return [line[gauche:gauche + max_colonnes]
+            for line in lines[haut:haut + max_lignes]], True
 
 
 class PanelView:
@@ -95,18 +118,26 @@ class PanelView:
         self.screen.blit(val, (rect.x + 16, rect.y + 30))
 
     def _vision(self, game, x, y):
-        lines = game.board.vision_lines()
         font = self.fonts["vision"]
         line_h = font.get_height() + 1
+        cw = font.size("0")[0]
+        # Sur un grand plateau, la croix complete ne tient pas dans le
+        # panneau : on n'en montre que le centre, autour de la tete.
+        bas = theme.WIN_H - 20 - 62 - 18 * len(hints_for(game))
+        lines, recadree = recadrer(
+            game.board.vision_lines(),
+            max(3, (bas - y - 56 - 12) // line_h),
+            max(3, (theme.PANEL_W - 32) // cw),
+        )
         height = 44 + line_h * max(1, len(lines)) + 12
         rect = pygame.Rect(x, y, theme.PANEL_W, height)
         gfx.card(self.screen, rect, theme.BG_CARD, theme.BORDER, 14)
         head = self.fonts["label"].render(
-            "VISION DU SERPENT  (terminal)", True, theme.TEXT_MUTED
+            "VISION DU SERPENT  (centre de la croix)" if recadree
+            else "VISION DU SERPENT  (terminal)", True, theme.TEXT_MUTED
         )
         self.screen.blit(head, (x + 16, y + 14))
 
-        cw = font.size("0")[0]
         for row, line in enumerate(lines):
             for col, char in enumerate(line):
                 if char == " ":

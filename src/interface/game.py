@@ -2,6 +2,7 @@
 
 import random
 
+from .. import config as cfg
 from ..config import GameConfig
 from ..environment import board as bd
 from ..environment.rewards import recompense
@@ -9,8 +10,8 @@ from . import gfx, theme
 from .board_view import cell_center
 from .particles import ParticleSystem
 
-MIN_SPEED = 1.0
-MAX_SPEED = 30.0
+MIN_SPEED = cfg.SPEEDS[0]
+MAX_SPEED = cfg.SPEEDS[-1]
 
 
 class Game:
@@ -54,6 +55,11 @@ class Game:
         if self.agent is None:
             return "PILOTE IA  ·  AGENT NON BRANCHE"
         return "PILOTE IA"
+
+    @property
+    def pause_fin(self):
+        """Secondes d'ecran de fin avant la session suivante."""
+        return 1.2
 
     # -- geometrie ----------------------------------------------------
     @property
@@ -164,7 +170,7 @@ class Game:
 
         if not self.board.alive:
             self.death_timer += dt
-            if self.death_timer > 1.2:
+            if self.death_timer > self.pause_fin:
                 self.next_session()
             return
         if self.paused:

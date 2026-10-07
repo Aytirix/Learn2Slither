@@ -58,7 +58,7 @@ plan d'implémentation. Le code de l'agent n'y est pas écrit — c'est le trava
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install pygame-ce flake8
-./snake                      # ouvre le lobby
+./snake                      # ouvre le menu principal
 ```
 
 `./snake` détecte automatiquement `.venv/bin/python` s'il existe, sinon il
@@ -76,20 +76,40 @@ Suite de tests — `unittest` de la bibliothèque standard, rien à installer :
 .venv/bin/python -m unittest discover -s tests -t .
 ```
 
-### Le lobby
+### Le menu principal
 
-Écran de configuration affiché avant la partie :
+Lancé sans argument, `./snake` ouvre le menu principal :
+
+| Entrée | Rôle |
+|---|---|
+| **JOUER** | le lobby : l'IA joue au mieux (agent **figé**, rien n'est sauvegardé), ou toi au clavier |
+| **ENTRAINEMENT** | liste des modèles et leur détail ; créer un modèle (nom, γ, ε minimal, pas cible, plateau, parties) ; continuer l'entraînement d'un modèle jusqu'à N parties |
+| **EVALUATION** | parties en boucle avec l'agent figé jusqu'à une partie de longueur ≥ 35, menée jusqu'à sa fin ; puis statistiques et rejeu coup par coup |
+| **QUITTER** | ferme le programme |
+
+`ÉCHAP` remonte d'un écran ; depuis le menu principal, il quitte.
+
+**Lobby (JOUER) et réglages de l'évaluation :**
 
 | Réglage | Valeurs | Défaut |
 |---|---|---|
-| PILOTE | `IA` / `JOUEUR` | **IA** |
-| MODÈLE | fichiers de `models/` | aucun |
-| PLATEAU | 5×5 → 30×30 | **10×10** |
-| VITESSE | 1 → 30 cases/s | 6 |
+| PILOTE (JOUER seulement) | `IA` / `JOUEUR` | **IA** |
+| MODÈLE | `CHOISIR` ouvre la liste des modèles avec leur détail, validée par `OK` | le plus entraîné |
+| PLATEAU | 5×5 → 50×50 | **10×10** |
+| VITESSE | 1 → 100 cases/s | 6 |
 
-Navigation : `↑`/`↓` choisir, `←`/`→` modifier, `ENTRÉE` lancer, `ÉCHAP`
-quitter. La souris fonctionne sur les chevrons, les pastilles et le bouton.
-La ligne MODÈLE est grisée et sautée quand le pilote est `JOUEUR`.
+Navigation : `↑`/`↓` choisir, `←`/`→` modifier, `ENTRÉE` lancer (ou ouvrir
+le choix du modèle sur la ligne MODÈLE). La souris fonctionne partout.
+
+**Entraînement en fenêtre :** les parties sont jouées par tranches entre deux
+images (barre de progression, moyenne des 100 dernières parties, courbe).
+`ARRETER`, `ÉCHAP`, la croix de la fenêtre ou Ctrl+C arrêtent et
+**sauvegardent** les parties déjà jouées.
+
+**Résultats de l'évaluation :** parties jouées, longueur moyenne, médiane,
+maximale, causes de fin ; rejeu de la partie qui a atteint 35 (ou de la
+meilleure si l'évaluation a été arrêtée) : `←` coup précédent, `→` coup
+suivant, `ORIGINE` / `FIN` début / présent.
 
 ### En partie
 
@@ -103,7 +123,7 @@ La ligne MODÈLE est grisée et sautée quand le pilote est `JOUEUR`.
 | `T` | trace terminal |
 | `+` / `-` | vitesse |
 | `R` | nouvelle partie |
-| `ÉCHAP` | retour au lobby |
+| `ÉCHAP` | retour au lobby (en évaluation : arrêter et voir les résultats) |
 
 ---
 
@@ -156,6 +176,8 @@ src/
 ├── models.py              recensement des fichiers de models/
 ├── baselines.py           agents de référence sans apprentissage
 ├── session.py             enchaînement des parties, statistiques
+├── training.py            entraînement par tranches (menu ENTRAINEMENT)
+├── evaluation.py          seuil 35, statistiques, photos pour le rejeu
 ├── environment/
 │   └── board.py           plateau, règles, vision
 ├── agent/
@@ -172,9 +194,15 @@ src/
     ├── board_view.py      rendu du plateau
     ├── panel_view.py      panneau latéral
     ├── renderer.py        composition d'une frame
-    ├── lobby.py           écran de configuration
+    ├── widgets.py         fond, boutons, formulaires communs aux menus
+    ├── menu.py            menu principal
+    ├── lobby.py           écran de configuration (JOUER, EVALUATION)
+    ├── model_picker.py    choix du modèle
+    ├── model_card.py      liste et fiche détaillée d'un modèle
+    ├── training_view.py   écran ENTRAINEMENT
+    ├── evaluation_view.py partie d'évaluation, résultats et rejeu
     ├── game.py            état d'une partie, tempo, effets
-    └── loop.py            boucle pygame, machine à états lobby ⇄ partie
+    └── loop.py            boucle pygame, machine à états entre les écrans
 tests/                     suite unittest (bibliothèque standard)
 ├── helpers.py             plateaux de test, agent espion, barème
 ├── test_board.py          vision, collisions, pommes, mort, troncature

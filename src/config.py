@@ -7,8 +7,9 @@ PILOT_HUMAN = "joueur"
 PILOTS = (PILOT_AI, PILOT_HUMAN)
 
 MIN_SIZE = 5
-MAX_SIZE = 30
-SPEEDS = (1.0, 2.0, 4.0, 6.0, 10.0, 15.0, 20.0, 30.0)
+MAX_SIZE = 50
+SPEEDS = (1.0, 2.0, 4.0, 6.0, 10.0, 15.0, 20.0, 30.0, 50.0, 75.0,
+          100.0)
 DEFAULT_SPEED = 6.0
 
 

@@ -8,6 +8,7 @@ from ..environment import board as bd
 from . import gfx, theme
 
 PAD = 16
+FIN_HINT = "[ESPACE] ou [R] pour rejouer"
 
 # Libelles d'affichage derives de la source unique de `board`. Le nom evite
 # "DEATH" a dessein : une troncature n'est pas une mort.
@@ -87,7 +88,7 @@ class BoardView:
         )
 
         if not board.alive:
-            self._game_over(board)
+            self._game_over(game)
         return self.surf
 
     def _grid(self, board):
@@ -204,7 +205,8 @@ class BoardView:
                 self.surf, theme.SNAKE_EYE, (int(ex), int(ey)), eye_r
             )
 
-    def _game_over(self, board):
+    def _game_over(self, game):
+        board = game.board
         overlay = pygame.Surface(self.surf.get_size(), pygame.SRCALPHA)
         overlay.fill((6, 8, 18, 190))
         self.surf.blit(overlay, (0, 0))
@@ -224,7 +226,8 @@ class BoardView:
                 theme.TEXT_DIM,
             ), 340),
             (self.fonts["label"].render(
-                "[ESPACE] ou [R] pour rejouer", True, theme.ACCENT), 390),
+                getattr(game, "fin_hint", FIN_HINT), True, theme.ACCENT),
+             390),
         )
         for surf, y in rows:
             self.surf.blit(surf, (cx - surf.get_width() // 2, y))

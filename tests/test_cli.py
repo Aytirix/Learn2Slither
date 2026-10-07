@@ -61,13 +61,13 @@ class TestTraductionDesArguments(unittest.TestCase):
     def test_vitesse_bornee(self):
         """0 ou infini faisaient diviser par zero dans la boucle graphique."""
         self.assertEqual(config(["-speed", "0"]).speed, 1.0)
-        self.assertEqual(config(["-speed", "1000"]).speed, 30.0)
+        self.assertEqual(config(["-speed", "1000"]).speed, 100.0)
         self.assertEqual(config(["-speed", "inf"]).speed, 6.0)
         self.assertEqual(config(["-speed", "nan"]).speed, 6.0)
 
     def test_taille_bornee(self):
         self.assertEqual(config(["-size", "1"]).size, 5)
-        self.assertEqual(config(["-size", "999"]).size, 30)
+        self.assertEqual(config(["-size", "999"]).size, 50)
 
 
 if __name__ == "__main__":
