@@ -17,6 +17,12 @@ VIDE = bd.EMPTY_CHAR
 # C'est le curseur de richesse de l'etat (IA.md section 6.5).
 DISTANCE_MAX = 3
 
+# A incrementer a CHAQUE changement de la facon d'encoder un etat. Un modele
+# sauvegarde avec un autre encodage serait silencieusement faux : ses cles ne
+# correspondraient plus aux etats calcules. modele.py refuse donc de le
+# charger (IA.md section 11.5).
+VERSION_ENCODAGE = 1
+
 
 def lire_rayon(rayon):
     """Premiere chose vue sur un rayon, et sa distance plafonnee.
@@ -40,7 +46,8 @@ def lire_rayon(rayon):
 #
 # L'agent ne raisonne pas en HAUT / BAS / GAUCHE / DROITE, mais par rapport a
 # la direction ou il va (son "cap") : tout droit, tourner a gauche, tourner a
-# droite. Le demi-tour n'existe pas : il tue immediatement contre le cou.
+# droite. Le demi-tour n'existe pas : des 3 cases de long, il tue
+# immediatement contre le cou (a 2 cases ou moins il est legal, mais rare).
 
 TOUT_DROIT = 0
 GAUCHE = 1
