@@ -565,7 +565,9 @@ Si l'état est égocentrique, **les actions doivent l'être aussi**. Sinon l'app
 
 Contre-exemple : état « pomme devant », action absolue `RIGHT`. Si le serpent va vers la droite, `RIGHT` avance vers la pomme. S'il va vers le haut, `RIGHT` tourne à angle droit. Même état, même action, conséquences opposées. La table apprend du bruit.
 
-L'agent raisonne donc sur **3 actions relatives** : tout droit, tourner à gauche, tourner à droite. Le demi-tour est absent : il tue instantanément contre le cou du serpent.
+L'agent raisonne donc sur **3 actions relatives** : tout droit, tourner à gauche, tourner à droite. Le demi-tour est absent : dès que le serpent mesure 3 cases ou plus, il tue instantanément contre le cou.
+
+Précision vérifiable dans `board.py` : à 2 cases ou moins, le demi-tour n'est **pas** mortel, parce que la queue libère la case au même moment où la tête y arrive. Le serpent ne descend sous 3 cases qu'en mangeant des pommes rouges, donc le cas est rare, et la perte d'un coup légal dans ce cas précis est négligeable face au gain.
 
 #### La conversion vers les actions du sujet
 
@@ -612,7 +614,7 @@ Trois conséquences, toutes favorables.
 
 **La signature ne change pas.** `choose(vision)` renvoie un tuple de direction absolue, exactement ce que la boucle de jeu attend déjà — vérifié dans les deux boucles, headless et graphique. L'encodage égocentrique ne coûte donc aucune modification de l'interface. (La boucle elle-même devra être réécrite, mais pour une autre raison : le rejeu inverse de §4.7.)
 
-**Le demi-tour devient impossible.** Avec 3 actions relatives, l'agent ne peut pas produire un retournement à 180°, qui est une mort instantanée contre le cou. Une cause de mort supprimée par construction plutôt que par apprentissage.
+**Le demi-tour devient impossible.** Avec 3 actions relatives, l'agent ne peut pas produire un retournement à 180°, qui est une mort instantanée contre le cou dès 3 cases de longueur. Une cause de mort supprimée par construction plutôt que par apprentissage.
 
 **L'initialisation en début de partie est simple.** Au reset, le serpent reçoit une direction aléatoire. L'environnement la maintient déjà dans `board.direction` ; l'agent la lit une fois au début de l'épisode, puis la met à jour lui-même à chaque action. C'est le cap du serpent, pas un contenu de case.
 
