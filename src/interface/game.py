@@ -4,6 +4,7 @@ import random
 
 from ..config import GameConfig
 from ..environment import board as bd
+from ..environment.rewards import recompense
 from . import gfx, theme
 from .board_view import cell_center
 from .particles import ParticleSystem
@@ -37,6 +38,8 @@ class Game:
         self.session = 1
         self.sessions = self.config.sessions
         self.death_timer = 0.0
+        self.agent_en_partie = False
+        self._debut_partie_agent()
 
     @property
     def manual(self):
@@ -113,6 +116,8 @@ class Game:
 
     def restart(self):
         """Nouvelle partie, effets remis a zero."""
+        # Une partie abandonnee en cours (touche R) est quand meme apprise.
+        self._fin_partie_agent()
         self.board.reset()
         self.particles.clear()
         self.prev_snake = list(self.board.snake)
@@ -122,6 +127,30 @@ class Game:
         self.death_timer = 0.0
         self.shake_amp = 0.0
         self.best_length = max(self.best_length, len(self.board.snake))
+        self._debut_partie_agent()
+
+    # -- agent --------------------------------------------------------
+    @property
+    def agent_pilote(self):
+        """Vrai si c'est l'agent, et non le clavier, qui dirige."""
+        return self.agent is not None and not self.manual
+
+    def _debut_partie_agent(self):
+        debut = getattr(self.agent, "debut_partie", None)
+        if self.agent_pilote and debut is not None:
+            debut(self.board.direction)
+            self.agent_en_partie = True
+
+    def _fin_partie_agent(self):
+        """Fait apprendre la partie a l'agent, une seule fois par partie."""
+        fin = getattr(self.agent, "fin_partie", None)
+        if self.agent_en_partie and fin is not None:
+            fin()
+        self.agent_en_partie = False
+
+    def close(self):
+        """A la fermeture : ne pas perdre la partie en cours."""
+        self._fin_partie_agent()
 
     def change_speed(self, factor):
         self.speed = max(MIN_SPEED, min(MAX_SPEED, self.speed * factor))
@@ -171,15 +200,30 @@ class Game:
             )
 
     def _tick(self):
-        direction = self._next_direction()
+        vision = self.board.vision_chars()
+        direction = self._next_direction(vision)
         self.prev_snake = list(self.board.snake)
         event = self.board.step(direction)
+        self._apprendre(vision, direction, event)
         self._on_event(event, direction)
 
-    def _next_direction(self):
+    def _apprendre(self, vision, direction, event):
+        """Meme contrat que la boucle sans affichage (src/session.py)."""
+        if not self.agent_pilote:
+            return
+        learn = getattr(self.agent, "learn", None)
+        if learn is not None:
+            # board.dead et non `not alive` : une troncature bootstrappe.
+            apres = vision if self.board.dead else self.board.vision_chars()
+            learn(vision, direction, recompense(event), apres,
+                  self.board.dead)
+        if not self.board.alive:
+            self._fin_partie_agent()
+
+    def _next_direction(self, vision):
         """Direction du prochain pas : agent, file clavier, ou statu quo."""
-        if self.agent is not None and not self.manual:
-            return self.agent.choose(self.board.vision_chars())
+        if self.agent_pilote:
+            return self.agent.choose(vision)
         if self.pending:
             return self.pending.pop(0)
         return self.board.direction

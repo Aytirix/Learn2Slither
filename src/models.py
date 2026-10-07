@@ -4,7 +4,7 @@ import os
 
 MODELS_DIR = "models"
 EXTENSIONS = (".txt", ".json", ".qtable")
-BLANK_LABEL = "Aucun (modele a venir)"
+BLANK_LABEL = "Aucun (agent neuf)"
 
 
 def list_models(directory=MODELS_DIR):

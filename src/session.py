@@ -1,12 +1,14 @@
 """Enchainement de sessions sans affichage (-visual off).
 
-L'agent est optionnel : tant qu'il n'existe pas, le serpent conserve
-sa direction. Interface attendue cote agent :
+Contrat avec l'agent (voir src/agent/agent.py), toutes les methodes sauf
+choose() sont optionnelles, pour accepter aussi les agents de reference :
 
-    agent.choose(vision)                     -> direction (tuple)
+    agent.debut_partie(direction)             cap de depart du serpent
+    agent.choose(vision)        -> direction  a chaque pas
     agent.learn(vision, action, reward,
-                next_vision, done)           -> None      (optionnel)
-    agent.save(path) / agent.load(path)      -> None      (optionnel)
+                next_vision, done)            a chaque pas, done = board.dead
+    agent.fin_partie()                        une fois, a la fin de la partie
+    agent.save(path)                          avec -save
 
 `vision` est le dictionnaire renvoye par Board.vision_chars().
 """
@@ -94,6 +96,12 @@ def play_session(board, agent=None, reward_fn=None, trace=False):
     - `board.dead` dit s'il existe un apres. Il determine le BOOTSTRAP. Il
       est faux sur une troncature, car le serpent etait vivant.
     """
+    debut = getattr(agent, "debut_partie", None)
+    if debut is not None:
+        # L'agent raisonne dans le repere du serpent : il doit savoir dans
+        # quel sens celui-ci part (IA.md section 6.6).
+        debut(board.direction)
+
     while board.alive and board.steps < MAX_STEPS_PER_SESSION:
         vision = board.vision_chars()
         action = agent.choose(vision) if agent else board.direction
@@ -115,6 +123,11 @@ def play_session(board, agent=None, reward_fn=None, trace=False):
         # On la termine proprement, sinon `end_cause` resterait a None et une
         # partie finie sans cause casserait les statistiques.
         board.truncate()
+
+    fin = getattr(agent, "fin_partie", None)
+    if fin is not None:
+        # C'est ici que l'agent apprend : il rejoue la partie, dans l'ordre.
+        fin()
     return board.end_cause
 
 
@@ -127,7 +140,15 @@ def run_sessions(config, agent=None, reward_fn=None):
     for index in range(config.sessions):
         if index:
             board.reset()
-        play_session(board, agent, reward_fn, trace=config.trace)
+        try:
+            play_session(board, agent, reward_fn, trace=config.trace)
+        except KeyboardInterrupt:
+            # Ctrl+C sur un long entrainement : on garde ce qui est appris.
+            # Les parties terminees sont gardees ; celle qui etait en cours
+            # n'est en general pas apprise.
+            print("\nInterruption : arret apres {} parties completes".format(
+                stats.games))
+            break
         stats.record(board)
         print(
             "Fin de la partie, longueur maximale = {}, "

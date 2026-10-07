@@ -1,5 +1,7 @@
 """Configuration d'une session, partagee par le lobby, le jeu et le CLI."""
 
+import math
+
 PILOT_AI = "ia"
 PILOT_HUMAN = "joueur"
 PILOTS = (PILOT_AI, PILOT_HUMAN)
@@ -7,6 +9,7 @@ PILOTS = (PILOT_AI, PILOT_HUMAN)
 MIN_SIZE = 5
 MAX_SIZE = 30
 SPEEDS = (1.0, 2.0, 4.0, 6.0, 10.0, 15.0, 20.0, 30.0)
+DEFAULT_SPEED = 6.0
 
 
 class GameConfig:
@@ -18,7 +21,11 @@ class GameConfig:
         self.pilot = pilot if pilot in PILOTS else PILOT_AI
         self.model = model
         self.size = max(MIN_SIZE, min(MAX_SIZE, size))
-        self.speed = speed
+        # Bornee comme la taille : 0 ou une valeur infinie font diviser par
+        # zero dans la boucle graphique, NaN fige le serpent.
+        if not isinstance(speed, (int, float)) or not math.isfinite(speed):
+            speed = DEFAULT_SPEED
+        self.speed = max(SPEEDS[0], min(SPEEDS[-1], speed))
         self.seed = seed
         self.sessions = max(1, sessions)
         self.save_path = save_path
