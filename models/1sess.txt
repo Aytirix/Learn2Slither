@@ -1,0 +1,89 @@
+{
+ "format": "learn2slither-qtable",
+ "version_encodage": 1,
+ "distance_max": 3,
+ "regle": "qlearning",
+ "hyperparametres": {
+  "gamma": 0.95,
+  "alpha": "1/n^0.7",
+  "valeur_initiale": 1.0,
+  "epsilon_min": 0.01,
+  "pas_cible": 5000
+ },
+ "parties": 1,
+ "pas_total": 7,
+ "qtable": {
+  "G2|W3|W3": {
+   "valeurs": [
+    1.0,
+    1.0,
+    -0.050000000000000044
+   ],
+   "visites": [
+    0,
+    0,
+    1
+   ]
+  },
+  "W1|W2|R3": {
+   "valeurs": [
+    1.0,
+    -0.050000000000000044,
+    1.0
+   ],
+   "visites": [
+    0,
+    1,
+    0
+   ]
+  },
+  "W1|W3|W1": {
+   "valeurs": [
+    1.0,
+    1.0,
+    -50.0
+   ],
+   "visites": [
+    0,
+    0,
+    1
+   ]
+  },
+  "W2|G2|W2": {
+   "valeurs": [
+    1.0,
+    1.0,
+    -0.050000000000000044
+   ],
+   "visites": [
+    0,
+    0,
+    1
+   ]
+  },
+  "W2|W3|W3": {
+   "valeurs": [
+    1.0,
+    -0.050000000000000044,
+    1.0
+   ],
+   "visites": [
+    0,
+    1,
+    0
+   ]
+  },
+  "W3|W3|W3": {
+   "valeurs": [
+    1.0,
+    -0.050000000000000044,
+    -0.050000000000000044
+   ],
+   "visites": [
+    0,
+    1,
+    1
+   ]
+  }
+ }
+}
