@@ -283,40 +283,51 @@ Mais au passage suivant dans l'état d'avant, `max Q(s', a')` est maintenant plu
 
 L'information remonte d'un pas par visite. C'est pourquoi il faut beaucoup d'épisodes : la récompense doit se diffuser en arrière à travers la chaîne d'états.
 
-### 4.7 Rejouer la partie à l'envers
+### 4.7 Apprendre en fin de partie — et pourquoi pas à l'envers
 
-Le paragraphe précédent décrit le principal goulot d'étranglement du projet. Il se supprime en six lignes.
+Le paragraphe précédent décrit un vrai frein : l'information remonte d'un pas par visite. Une idée séduisante pour l'accélérer, et c'est celle que proposait la première version de ce cours, est de **rejouer la partie à l'envers** une fois finie. Elle a été implémentée, auditée et mesurée. **En général, elle ne marche pas en Q-learning**, et comprendre pourquoi est une excellente question de soutenance.
 
-**Le problème, chiffré.** Le serpent joue 30 pas et meurt contre le mur. Les mises à jour se font au fil de l'eau :
+**Ce qu'on espérait.** Le serpent joue 30 pas et meurt. On note les 30 transitions, et à la fin on les apprend en commençant par la dernière. Le pas 30 encaisse le −50 en premier ; quand vient le tour du pas 29, son état d'arrivée vient d'être corrigé, donc il « voit » la mort ; puis 28 voit 29, et ainsi de suite. Toute la chaîne apprendrait la mort en une seule partie.
+
+**Pourquoi c'est faux.** La cible du pas 29 n'utilise pas l'action qui a tué, mais la **meilleure** action de l'état d'arrivée :
 
 ```
-pas 1  → mise à jour faite      (on ne sait pas encore qu'on va mourir)
-pas 2  → mise à jour faite      (idem)
-...
-pas 29 → mise à jour faite      (idem)
-pas 30 → MORT, pénalité         ← seule cette case apprend quelque chose
+cible(pas 29) = −1 + γ · max Q(état du pas 30)
 ```
 
-À la fin de la partie, **une seule case de la table** sait que ce mur est mauvais. Le pas 29 ne l'apprendra qu'à sa prochaine visite, le pas 28 à celle d'après. Pour qu'une chaîne de 30 pas comprenne le danger, il faut donc repasser des dizaines de fois par les mêmes états.
+Or dans cet état, seule l'action mortelle vient de passer à −50. Les deux autres n'ont jamais été essayées : elles valent encore +1 (initialisation optimiste, §8.4). Le `max` vaut donc +1, et le pas 29 ne voit **rien** :
 
-**Le correctif.** On garde les transitions de la partie dans une liste, et à la fin on **rejoue la liste à l'envers**.
+```
+état du pas 30 : [−50, 1.0, 1.0]    ← max = 1.0
+cible du pas 29 : −1 + 0.95 × 1.0 = −0.05
+```
+
+Le −50 reste bloqué sur le dernier pas. C'est d'ailleurs **correct** : depuis l'avant-dernière situation, le serpent pouvait encore s'en sortir en tournant. Q-learning ne propage une mauvaise nouvelle que lorsque **toutes** les options de l'état suivant sont connues comme mauvaises. Il propage en revanche facilement les bonnes, puisqu'une action qui rapporte devient le `max`.
+
+**Mesuré sur ce projet** (2 000 parties d'entraînement, 8 graines, évaluation figée sur 100 parties) :
+
+| Quand et comment on apprend | Longueur moyenne | Écart-type |
+|---|---|---|
+| à chaque pas, pendant la partie | 25,5 | 4,2 |
+| en fin de partie, à l'envers | 25,4 | 3,0 |
+| **en fin de partie, dans l'ordre** | **27,2** | 3,4 |
+
+Rejouer à l'envers n'apporte rien. Apprendre en fin de partie, dans l'ordre, est un peu devant ; l'écart reste de l'ordre d'un écart-type, donc à ne pas survendre. C'est ce que fait l'agent livré : `learn()` **note** chaque pas, `fin_partie()` les apprend **dans l'ordre**.
 
 ```
 trajectoire = []
 
-# pendant la partie
+# pendant la partie : on note seulement
 trajectoire.ajouter((s, a, r, s_suivant, mort))
 
-# à la fin de la partie
-pour (s, a, r, s_suivant, mort) dans inverse(trajectoire):
-    apprendre(s, a, r, s_suivant, mort)
+# à la fin de la partie : on apprend chaque pas, du premier au dernier
+pour (s, a, r, s_suivant, mort) dans trajectoire:
+    mettre_a_jour(s, a, r, s_suivant, mort)
 ```
 
-**Pourquoi l'ordre inverse change tout.** Quand on met à jour le pas 29, le pas 30 a **déjà** encaissé la pénalité. Donc 29 la voit immédiatement. Puis 28 voit 29, puis 27 voit 28. Toute la chaîne apprend la mort **dans la même partie**, au lieu d'en 30 parties.
+Une règle à ne pas perdre : **un pas est appris une seule fois**. Noter pendant la partie *et* apprendre en direct ferait compter chaque transition double, et fausserait `α` (§8.1).
 
-Gain constaté couramment : 3 à 10 fois moins d'épisodes pour la même performance. C'est le levier le plus rentable du projet après l'encodage de l'état, et c'est la version la plus simple de ce que font les traces d'éligibilité (§10.4).
-
-Note : avec le rejeu inverse, la mise à jour « en direct » pendant la partie devient redondante. Choisis l'un ou l'autre, pas les deux, sinon chaque transition compte double et ton `α` effectif est faussé.
+Ce qui fait vraiment remonter une valeur plus loin qu'un pas, ce sont les traces d'éligibilité (§10.4) ou le rejeu de transitions anciennes (Dyna-Q, §10.6). Aucun des deux n'est nécessaire pour atteindre l'objectif du sujet.
 
 ---
 
@@ -378,7 +389,7 @@ Q[s] = [0.0, 0.0, 0.0]
 Q[s].index(max(Q[s]))       # → 0, toujours, indéfiniment
 ```
 
-Or au départ **toute la table vaut zéro**. Donc :
+Or au départ **toutes les actions d'un état neuf ont la même valeur** (+1, §8.4). Donc :
 
 - ton agent non entraîné n'est pas aléatoire, il est « toujours l'action n°0 ». Il rentre dans le mur de la même façon à chaque partie ;
 - chaque fois qu'il découvre un état neuf, il rejoue cette même action par défaut. Seul `ε` le sauve, et `ε` diminue ;
@@ -396,25 +407,31 @@ Le tirage ne s'applique qu'**entre ex-aequo**. Si une action est seule en tête,
 
 ### 5.3 Calibrer la décroissance
 
-Règle pratique : `ε` doit atteindre son plancher vers **50 à 70 % des pas de ton entraînement**. Ça laisse une phase finale où l'agent affine une politique déjà bonne au lieu de la bruiter.
+La règle qu'on lit souvent est de faire atteindre le plancher à `ε` vers 50 à 70 % de l'entraînement, pour garder une longue phase d'exploration. **Mesurée sur ce projet, elle est fausse.** 1 000 parties d'entraînement, 4 graines, évaluation figée sur 100 parties :
 
-Il faut donc une estimation du nombre total de pas. Elle est grossière et c'est suffisant : lance 200 épisodes, regarde la durée moyenne, multiplie par le nombre d'épisodes prévu.
+| `pas_cible` | 2 000 | 5 000 | 10 000 | 20 000 | 50 000 |
+|---|---|---|---|---|---|
+| Longueur moyenne | 22,7 | **21,7** | 20,1 | 18,0 | 7,1 |
+| Écart-type | 3,5 | **1,6** | 2,5 | 1,7 | 1,1 |
 
-| Pas totaux estimés | `pas_cible` (≈ 60 %) |
-|---|---|
-| 100 000 | 60 000 |
-| 300 000 | 180 000 |
-| 1 000 000 | 600 000 |
+Sortir vite de l'exploration paie, et de loin. Deux raisons :
 
-Diagnostic : si la performance stagne très tôt puis ne bouge plus jamais, `pas_cible` est trop petit. Si elle reste chaotique jusqu'à la fin, il est trop grand.
+- **l'initialisation optimiste explore déjà** (§8.4) : chaque situation nouvelle pousse le serpent à essayer ce qu'il ne connaît pas, sans avoir besoin du hasard ;
+- **une partie jouée au hasard est courte** : le serpent meurt en quelques pas, voit peu de situations, apprend peu. Une partie jouée en exploitant dure des centaines de pas, et c'est elle qui remplit la table.
 
-C'est un des paramètres que le sweep (§8.5) règle le mieux, parce que son effet est monotone et lisible sur la courbe.
+Et Q-learning apprend la bonne politique même pendant qu'il explore (il est *off-policy*, §10.1) : explorer longtemps ne protège donc de rien ici, ça ne fait que gaspiller des parties.
+
+**Valeur retenue : `PAS_CIBLE = 5 000`**, la plus stable d'une graine à l'autre. Honnêtement, 2 000 fait aussi bien ou mieux : un audit indépendant, avec d'autres graines d'évaluation, l'a mesuré à 28,2 contre 23,0. Mais 2 000 varie davantage d'une graine à l'autre ; c'est le premier candidat à départager par le sweep (§8.5). En pratique `ε` atteint son plancher au bout d'environ 200 parties, et un modèle de 1 000 parties joue proprement même quand on le recharge sans `-dontlearn`.
+
+Diagnostic, si tu changes de problème : si la performance reste chaotique et basse longtemps, `pas_cible` est trop grand ; si elle plafonne très bas dès le début, il est trop petit. C'est un des paramètres que le sweep (§8.5) règle le mieux.
 
 ### 5.4 Note sur l'évaluation
 
 Pour mesurer la performance d'un modèle, il faut `ε = 0`. Sinon tu mesures un mélange de la politique et du bruit.
 
-C'est ce que devra faire l'option `-dontlearn` du sujet : `ε = 0` et pas de mise à jour de Q. **Elle n'est pas encore câblée** : la ligne de commande la lit et la range dans `config.learn`, mais aucun module ne consulte ce champ aujourd'hui — il n'y a pas encore d'agent à figer. À brancher à l'étape 3, en même temps que `-load`.
+C'est ce que fait l'option `-dontlearn` du sujet : `ε = 0` et pas de mise à jour de Q (`Agent.figer()`).
+
+Un piège a été rencontré en l'implémentant : si l'agent figé, en **regardant** une situation inconnue pour choisir, l'ajoute à la table avec ses valeurs initiales, le fichier du modèle grossit alors que rien n'a été appris. Le choix utilise donc une lecture seule (`QTable.lire`), et un test vérifie que `-dontlearn` laisse le fichier octet pour octet identique.
 
 ---
 
@@ -612,7 +629,7 @@ class Agent:
 
 Trois conséquences, toutes favorables.
 
-**La signature ne change pas.** `choose(vision)` renvoie un tuple de direction absolue, exactement ce que la boucle de jeu attend déjà — vérifié dans les deux boucles, headless et graphique. L'encodage égocentrique ne coûte donc aucune modification de l'interface. (La boucle elle-même devra être réécrite, mais pour une autre raison : le rejeu inverse de §4.7.)
+**La signature ne change pas.** `choose(vision)` renvoie un tuple de direction absolue, exactement ce que la boucle de jeu attend déjà — vérifié dans les deux boucles, headless et graphique. L'encodage égocentrique ne coûte donc aucune modification de l'interface. (La boucle, elle, appelle deux méthodes de plus : `debut_partie` pour donner le cap de départ, et `fin_partie` pour l'apprentissage en fin de partie de §4.7.)
 
 **Le demi-tour devient impossible.** Avec 3 actions relatives, l'agent ne peut pas produire un retournement à 180°, qui est une mort instantanée contre le cou dès 3 cases de longueur. Une cause de mort supprimée par construction plutôt que par apprentissage.
 
@@ -651,7 +668,7 @@ Effet : deux fois plus d'expérience par partie, et la table rétrécit encore p
 
 Même réserve que pour les rotations, en plus forte : le corps du serpent traîne derrière lui d'une façon qui n'est pas symétrique en miroir, donc on perd un peu d'information. D'où le flag `-mirror on/off` et la comparaison des courbes plutôt qu'un pari.
 
-Priorité basse : à considérer après le rejeu inverse (§4.7), l'initialisation optimiste (§8.4) et le sweep (§8.5).
+Priorité basse : à considérer après l'initialisation optimiste (§8.4) et le sweep (§8.5).
 
 ### 6.7 Pistes d'enrichissement
 
@@ -679,7 +696,15 @@ Pratiquement : ton serpent plafonnera. Ce n'est pas un défaut de ton code, c'es
 
 La phrase juste est donc : **aucune politique sans mémoire ne franchit ce mur.** Le plafond est celui du Q-learning tabulaire sur l'observation courante, ce qui est bien ce que le sujet impose d'implémenter.
 
-Quant au chiffre du plafond, il reste à mesurer sur ce projet — ne cite pas une valeur que tu n'as pas observée.
+**Mesuré sur ce projet** (évaluation figée, 100 parties, plateau 10×10) :
+
+| Entraînement | Longueur moyenne | Longueur max | Cause de mort dominante |
+|---|---|---|---|
+| hasard | 3,05 | 4 | son cou (demi-tour) |
+| 1 000 parties | 23,2 | 41 | son corps, 84 % |
+| 10 000 parties | 26,3 | 47 | son corps, 97 % |
+
+Dès 1 000 parties, le serpent meurt surtout **contre son propre corps** : c'est exactement la signature de l'observabilité partielle. Il ne voit pas la forme globale de son corps, donc il s'enferme. Le plafond n'est pas un manque d'entraînement : il est dans l'encodage.
 
 ---
 
@@ -718,7 +743,7 @@ Ce ne sont pas les valeurs absolues qui importent, mais leurs rapports.
 
 ### 7.4 Le reward shaping — OPTIONNEL, et à ne pas tenter en premier
 
-> **Statut : levier optionnel, volontairement reporté.** À ne regarder qu'après le rejeu inverse (§4.7), l'initialisation optimiste (§8.4), l'`α` par visites (§8.1) et le sweep (§8.5). Si la performance suffit sans, on n'y touche pas. Cette section existe pour qu'on ne retombe pas dans les pièges décrits plus bas si on y revient.
+> **Statut : levier optionnel, volontairement reporté.** À ne regarder qu'après l'initialisation optimiste (§8.4), l'`α` par visites (§8.1) et le sweep (§8.5). Si la performance suffit sans, on n'y touche pas. Cette section existe pour qu'on ne retombe pas dans les pièges décrits plus bas si on y revient.
 
 **L'intention.** L'agent ne touche `+20` qu'en mangeant. Entre deux pommes il n'encaisse que des `−1`. Il met donc très longtemps à comprendre que se diriger vers une pomme est bon. D'où l'envie de l'aider en route.
 
@@ -813,7 +838,7 @@ Le serpent ne voit une pomme verte que si elle partage sa ligne ou sa colonne, s
 
 Donc les deux tiers du temps, `Φ` reste collé à la sentinelle et le bonus ne dit rien d'utile sur la direction à prendre. Ce que ce shaping récompense réellement, ce n'est pas « avancer vers la pomme », c'est **s'aligner** sur une ligne ou une colonne qui en contient une — les gros `−5,45` et `+6,25`. C'est d'ailleurs la bonne compétence pour ce jeu, mais ce n'est plus la mécanique simple qu'on croyait mettre en place.
 
-Conclusion : le rapport bénéfice/risque est mauvais **au départ du projet**. Le rejeu inverse (§4.7) attaque le même problème — l'agent apprend trop lentement — en six lignes et sans toucher aux récompenses. Un shaping mal réglé, lui, produit un agent subtilement faux, c'est-à-dire le pire type de bug à débusquer.
+Conclusion : le rapport bénéfice/risque est mauvais **au départ du projet**. Le calibrage de `ε` (§5.3) attaque le même problème — l'agent apprend trop lentement — en six lignes et sans toucher aux récompenses. Un shaping mal réglé, lui, produit un agent subtilement faux, c'est-à-dire le pire type de bug à débusquer.
 
 #### Sur le risque de `-42`
 
@@ -901,7 +926,7 @@ Voir partie 5. `1.0 → 0.01`, décroissance ajustée à ton nombre d'épisodes.
 Q = defaultdict(lambda: [1.0, 1.0, 1.0])     # au lieu de [0.0, 0.0, 0.0]
 ```
 
-**Pourquoi ça marche.** Un pas normal coûte `−1`. Donc dès qu'une action est réellement essayée, sa valeur descend sous `+1`. Les actions jamais tentées, elles, restent à `+1`, donc au-dessus.
+**Pourquoi ça marche.** Un pas normal coûte `−1`. Donc dès qu'une action est réellement essayée, sa valeur descend en général sous `+1` (sauf si elle mène à une situation déjà connue comme très bonne, près d'une pomme par exemple). Les actions jamais tentées, elles, restent à `+1`, donc au-dessus.
 
 `argmax` préfère alors automatiquement ce qui n'a jamais été essayé. L'agent explore **méthodiquement**, et exactement là où il n'a aucune information — au lieu d'explorer au hasard avec `ε`, ce qui gaspille des coups à re-tester du déjà-connu.
 
@@ -957,7 +982,7 @@ Le RL échoue silencieusement. Le programme tourne, aucune exception, et l'agent
 | Va systématiquement dans la même direction au début | `argmax` ne départage pas les ex-aequo (§5.2) |
 | Apprend à mourir tôt, plafonne alors qu'il survivait bien | La troncature est traitée comme une mort (§4.5) |
 | La table se remplit très lentement, peu d'états visités | Initialisation à zéro plutôt qu'optimiste (§8.4) |
-| Apprend, mais il faut des dizaines de milliers d'épisodes | Pas de rejeu inverse (§4.7) |
+| Apprend, mais il faut des dizaines de milliers d'épisodes | `ε` décroît trop lentement (§5.3) |
 
 ### 9.1 Le bug le plus vicieux
 
@@ -1091,7 +1116,7 @@ Le `max` du Q-learning surestime systématiquement les valeurs (biais d'optimism
 
 Au lieu de propager la récompense d'un seul pas en arrière, on la propage sur toute la trajectoire récente avec un poids décroissant. Accélère nettement la convergence quand les récompenses sont rares. N'augmente pas le plafond de performance.
 
-Le **rejeu inverse de §4.7 en est la version pauvre et suffisante** : même objectif, six lignes, aucun paramètre `λ` à régler. C'est pour ça qu'il est recommandé au cœur du projet et pas ici.
+Le rejeu inverse de la première version de ce cours prétendait en être la version simple : c'est faux, et §4.7 montre pourquoi. Les vraies traces d'éligibilité propagent le long du chemin **joué**, là où la cible de Q-learning regarde le meilleur chemin. Non implémentées ici : le sujet n'en a pas besoin.
 
 ### 10.5 DQN
 
@@ -1101,7 +1126,7 @@ Sur ton projet avec ~1 700 états (§6.6) : **inutile et contre-productif**. Une
 
 ### 10.6 Dyna-Q — OPTIONNEL
 
-> **Statut : optionnel.** À ne considérer que si le rejeu inverse (§4.7) ne suffit pas, c'est-à-dire si l'entraînement reste trop lent après l'avoir mis en place. Les deux attaquent le même problème ; on commence par le moins cher.
+> **Statut : optionnel, non implémenté.** À ne considérer que si le calibrage de `ε` (§5.3) ne suffit pas, c'est-à-dire si l'entraînement reste trop lent après l'avoir mis en place. Les deux attaquent le même problème ; on commence par le moins cher.
 
 **Ce que fait le Q-learning simple.** L'agent n'apprend que de ce qui vient de se produire. Un pas réel = une mise à jour. 10 000 pas joués = 10 000 leçons. Le nombre de leçons est plafonné par le nombre de pas joués.
 
@@ -1123,14 +1148,14 @@ for _ in range(10):
 
 **Différence avec §4.7, puisque les deux se ressemblent.** Ils visent la même chose — augmenter le nombre de leçons utiles par pas réel — mais pas de la même manière :
 
-| | Rejeu inverse (§4.7) | Dyna-Q (§10.6) |
+| | Apprendre en fin de partie (§4.7) | Dyna-Q (§10.6) |
 |---|---|---|
-| Ce qu'il rejoue | la partie qui vient de se terminer, dans l'ordre inverse | des transitions anciennes, tirées au hasard |
-| Ce qu'il résout surtout | faire remonter la mort le long de la chaîne | densifier l'apprentissage partout |
+| Ce qu'il rejoue | la partie qui vient de se terminer, une seule fois | des transitions anciennes, tirées au hasard, plusieurs fois |
+| Ce qu'il apporte | chaque pas appris une fois, avec la table de la partie | plus de leçons par pas réellement joué |
 | Coût | ~6 lignes | ~15 lignes + un dictionnaire qui grossit |
-| Statut ici | recommandé, au cœur du projet | optionnel, seulement si besoin |
+| Statut ici | implémenté | optionnel, non implémenté |
 
-Ils sont compatibles et leurs effets s'ajoutent. Mais on met le rejeu inverse en place d'abord, on mesure, et on ne sort Dyna-Q que si la mesure le réclame.
+On ne sort Dyna-Q que si une mesure montre que l'apprentissage reste trop lent. Avec `ε` bien calibré (§5.3), ce n'est pas le cas ici.
 
 ---
 
@@ -1211,10 +1236,10 @@ pour chaque episode:
             display.render(board)
             print(vision, action)
 
-    # rejeu inverse : la mort remonte toute la chaîne en une seule partie (§4.7)
+    # fin de partie : chaque pas note est appris une fois, dans l'ordre (§4.7)
     si mode_apprentissage:
-        pour (s, a, r, s_prime, mort) dans inverse(trajectoire):
-            agent.learn(s, a, r, s_prime, mort)
+        pour (s, a, r, s_prime, mort) dans trajectoire:
+            agent.mettre_a_jour(s, a, r, s_prime, mort)
 
     stats.enregistrer(board.max_length, board.steps, board.end_cause)
 ```
@@ -1225,16 +1250,18 @@ Trois pièges sont désamorcés dans ce squelette, et ce sont les trois de la pa
 - la récompense se calcule sur `event`, l'événement du **pas**, et non sur la cause de fin, sinon atteindre la limite rapporte une prime (§7.2) ;
 - `ε` décroît sur le compteur de **pas cumulés**, mis à jour **dans** la boucle et non en fin d'épisode — un épisode entraîné fait 200 à 300 pas, pendant lesquels `ε` resterait figé (§5.2).
 
-**Ce squelette remplace la boucle actuelle**, qui appelle `learn` en direct à chaque pas. Les deux ne se cumulent pas : §4.7 prévient qu'apprendre deux fois la même transition fausse l'`α` effectif.
+Dans le code livré, ce squelette est réparti entre la boucle (`src/session.py`, et `src/interface/game.py` pour l'affichage) et l'agent (`src/agent/agent.py`) : la boucle appelle `debut_partie`, puis à chaque pas `choose` et `learn`, puis `fin_partie`. `learn` ne fait que **noter** la transition ; c'est `fin_partie` qui appelle `mettre_a_jour` sur chacune. Un pas n'est jamais appris deux fois (§4.7).
 
 ### 11.3 Pseudocode de la mise à jour
 
+Dans le code, cette fonction s'appelle `mettre_a_jour` (`learn` sert seulement à noter, §11.2).
+
 ```
-fonction learn(s, a, r, s_prime, mort):
+fonction mettre_a_jour(s, a, r, s_prime, mort):
     si mort:
         cible = r                                # pas de futur (§4.4)
     sinon:
-        cible = r + gamma * max(Q[s_prime])      # vaut aussi pour une troncature (§4.5)
+        cible = r + gamma * max(Q[s_prime])      # aussi sur une troncature (§4.5)
 
     n[(s, a)] += 1                               # §8.1, n >= 1
     alpha = 1 / n[(s, a)] ** 0.7
@@ -1312,7 +1339,7 @@ Entraîne 1 000 épisodes en headless. Trace la courbe de longueur moyenne. **Ne
 
 ### Étape 5 — Accélération de l'apprentissage
 Dans cet ordre, en mesurant après chacun :
-1. rejeu inverse de la trajectoire (§4.7) — le plus gros gain
+1. calibrer la décroissance de `ε` (§5.3) — le plus gros gain mesuré : ×3 à 1 000 parties
 2. initialisation optimiste de la table (§8.4)
 3. `α` décroissant par nombre de visites (§8.1)
 

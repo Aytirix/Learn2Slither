@@ -149,7 +149,7 @@ parties courtes ; des parties plus longues coûtent proportionnellement plus).
 snake                      lanceur shell (./snake -sessions ...)
 main.py                    point d'entrée : dispatch headless / graphique
 sujet/                     énoncé du projet (PDF, fr et en)
-models/                    modèles entraînés (à produire)
+models/                    modèles entraînés : 1, 10, 100, 1000, 10000 sessions
 src/
 ├── cli.py                 arguments du sujet
 ├── config.py              GameConfig : réglages d'une session
@@ -158,7 +158,12 @@ src/
 ├── session.py             enchaînement des parties, statistiques
 ├── environment/
 │   └── board.py           plateau, règles, vision
-├── agent/                 ← À CRÉER : votre agent
+├── agent/
+│   ├── interpreter.py     vision → état égocentrique, actions relatives
+│   ├── qtable.py          la table Q et ses compteurs de visites
+│   ├── agent.py           choisir, apprendre, rejeu inverse, epsilon
+│   ├── modele.py          sauvegarde / chargement JSON versionné
+│   └── fabrique.py        agent demandé par la ligne de commande
 └── interface/
     ├── theme.py           palette, dimensions, polices
     ├── gfx.py             bloom, halos, vignette, interpolations
@@ -179,17 +184,9 @@ tests/                     suite unittest (bibliothèque standard)
 
 ### Les points d'accroche de l'agent
 
-L'environnement, l'affichage et la ligne de commande sont en place. **Quatre
-branchements manquent encore**, en plus de l'agent lui-même :
-
-- `-load` ne charge aucun modèle ;
-- `-dontlearn` n'est lu par personne ;
-- aucune fonction de récompense n'existe, donc `learn()` n'est pas encore
-  appelé depuis le point d'entrée ;
-- `-save` n'est câblé que dans le chemin headless : `src/interface/` ne
-  contient aucun appel à `save`, donc `-visual on -save f` n'écrira rien.
-
-C'est le travail de l'étape 3 de `IA.md` §12.
+L'agent est écrit (`src/agent/`) et branché dans les deux boucles :
+`-load`, `-dontlearn` et `-save` fonctionnent en mode graphique comme sans
+affichage. Le barème de récompenses est dans `src/environment/rewards.py`.
 
 ```python
 # ce que l'environnement fournit
@@ -215,10 +212,12 @@ déclenché la troncature reste un `"move"`, avec son coût normal. `IA.md` §4.
 et §7.2 détaillent le piège.
 
 ```python
-# ce que le projet attend de votre agent
-agent.choose(vision) -> direction            # obligatoire
-agent.learn(vision, action, reward, next_vision, done)   # optionnel
-agent.save(path) / agent.load(path)          # optionnel
+# ce que les boucles appellent sur l'agent (src/agent/agent.py)
+agent.debut_partie(board.direction)          # cap de départ du serpent
+agent.choose(vision) -> direction            # à chaque pas, obligatoire
+agent.learn(vision, action, reward, next_vision, board.dead)  # à chaque pas
+agent.fin_partie()                           # rejeu inverse : il apprend ici
+agent.save(path)                             # -save ; -load : agent/modele.py
 ```
 
 `direction` est l'un des quatre tuples exportés par `src/environment/board.py` :
