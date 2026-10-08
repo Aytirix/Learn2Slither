@@ -83,11 +83,22 @@ Lancé sans argument, `./snake` ouvre le menu principal :
 | Entrée | Rôle |
 |---|---|
 | **JOUER** | le lobby : l'IA joue au mieux (agent **figé**, rien n'est sauvegardé), ou toi au clavier |
-| **ENTRAINEMENT** | liste des modèles et leur détail ; créer un modèle (nom, γ, ε minimal, pas cible, plateau, parties) ; continuer l'entraînement d'un modèle jusqu'à N parties |
-| **EVALUATION** | parties en boucle avec l'agent figé jusqu'à une partie de longueur ≥ 35, menée jusqu'à sa fin ; puis statistiques et rejeu coup par coup |
+| **ENTRAINEMENT** | liste des modèles et leur détail ; créer un modèle (nom, vision, γ, ε minimal, pas cible, valeur initiale, plateau, parties) ; continuer l'entraînement d'un modèle jusqu'à N parties |
+| **EVALUATION** | parties en boucle avec l'agent figé jusqu'à une partie de longueur ≥ OBJECTIF (réglable de 5 en 5, 35 par défaut), menée jusqu'à sa fin ; puis statistiques et rejeu coup par coup |
 | **QUITTER** | ferme le programme |
 
 `ÉCHAP` remonte d'un écran ; depuis le menu principal, il quitte.
+
+**Option VISION = PLATEAU (hors sujet).** À la création d'un modèle, on peut
+lui donner, en plus de sa croix, deux informations calculées sur **tout** le
+plateau : pour chaque coup, si la case mène à un piège (espace libre plus
+petit que le serpent), et de quel côté est la pomme verte la plus proche.
+Le sujet l'interdit (−42) : c'est une option de comparaison, jamais active
+par défaut, enregistrée dans le fichier du modèle (`"vision": "plateau"`).
+Partout où un tel modèle est utilisé (liste, fiche, lobby, partie,
+résultats, et `-load` en ligne de commande), un avertissement rouge
+« ATTENTION : VOIT TOUT LE PLATEAU (HORS SUJET) » s'affiche. Les modèles
+rendus dans `models/` voient tous seulement la croix.
 
 **Lobby (JOUER) et réglages de l'évaluation :**
 
@@ -117,11 +128,12 @@ suivant, `ORIGINE` / `FIN` début / présent.
 |---|---|
 | `←` `→` `↑` `↓` / `ZQSD` | diriger le serpent — **inactif en mode IA** |
 | `ESPACE` | pause, ou relancer après une mort |
-| `N` | avancer d'un pas (mode pas à pas) |
+| `N` / `→` | avancer d'un pas (active le mode pas à pas s'il ne l'est pas ; `→` seulement avec l'IA en pas à pas) |
+| `←` | pas à pas avec l'IA : revoir le pas précédent (affichage seulement, la partie n'est pas rejouée) |
 | `P` | activer/désactiver le mode pas à pas |
 | `V` | surbrillance de la vision du serpent |
 | `T` | trace terminal |
-| `+` / `-` | vitesse |
+| `+` / `-` | vitesse : 1, 5, 10, 15, 20, 30, 40, 50, 75, 100 cases/s, puis MAX |
 | `R` | nouvelle partie |
 | `ÉCHAP` | retour au lobby (en évaluation : arrêter et voir les résultats) |
 
@@ -146,7 +158,7 @@ Les options suivent le format du sujet (simple tiret, nom complet).
 | `-step-by-step` | avance d'un pas à chaque appui sur `N` |
 | `-verbose` | garde la trace terminal même avec `-visual off` |
 | `-size N` | taille du plateau (bonus) |
-| `-speed F` | cases par seconde |
+| `-speed F` | cases par seconde (`inf` = vitesse maximale) |
 | `-seed N` | graine aléatoire, pour des runs reproductibles |
 | `-pilot ia\|joueur` | pilote présélectionné |
 | `-lobby on\|off` | force ou non le passage par le lobby |
@@ -177,7 +189,7 @@ src/
 ├── baselines.py           agents de référence sans apprentissage
 ├── session.py             enchaînement des parties, statistiques
 ├── training.py            entraînement par tranches (menu ENTRAINEMENT)
-├── evaluation.py          seuil 35, statistiques, photos pour le rejeu
+├── evaluation.py          seuil (35 par défaut), statistiques, photos pour le rejeu
 ├── environment/
 │   └── board.py           plateau, règles, vision
 ├── agent/

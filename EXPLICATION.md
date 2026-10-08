@@ -26,7 +26,7 @@ Le cours théorique complet est dans `IA.md`. Ce document-ci suit le **code rée
 
 Le sujet demande 10 de longueur ; les bonus vont jusqu'à 35. Le meilleur modèle fait 28 de moyenne et a atteint 66 pendant l'entraînement.
 
-**La limite.** Tout converge vers environ **29,5** : à ce niveau, 97 à 100 % des morts sont contre son propre corps. Il s'enferme parce qu'il ne voit pas la forme de son corps, seulement une ligne et une colonne. Douze idées ont été testées pour dépasser ce plafond, aucune n'y arrive (section 5).
+**La limite.** Tout converge vers environ **29,5** : à ce niveau, 97 à 100 % des morts sont contre son propre corps. Il s'enferme parce qu'il ne voit pas la forme de son corps, seulement une ligne et une colonne. Treize idées ont été testées pour dépasser ce plafond, aucune n'y arrive (section 5).
 
 **Les commandes du sujet :**
 
@@ -290,9 +290,10 @@ Un modèle est **un fichier JSON** (avec l'extension `.txt`, comme dans les exem
 
 Lancé sans argument, `./snake` ouvre un **menu principal** (les 3 commandes du sujet, elles, ne passent pas par lui) :
 
-- **JOUER** : le lobby. En mode IA, l'agent est **figé** (`figer()`, ε = 0) : il joue au mieux, n'apprend rien et ne modifie aucun fichier. Le bouton CHOISIR ouvre la liste des modèles avec le détail de chacun (parties, pas, situations connues, γ, ε…), validée par OK. Par défaut, c'est le modèle le plus entraîné. Plateau jusqu'à 50×50, vitesse jusqu'à 100 cases/s.
+- **JOUER** : le lobby. En mode IA, l'agent est **figé** (`figer()`, ε = 0) : il joue au mieux, n'apprend rien et ne modifie aucun fichier. Le bouton CHOISIR ouvre la liste des modèles avec le détail de chacun (parties, pas, situations connues, γ, ε…), validée par OK. Par défaut, c'est le modèle le plus entraîné. Plateau de 5 en 5 jusqu'à 50×50 (partout : jouer, entraînement, évaluation), vitesse par crans 1, 5, 10, 15, 20, 30, 40, 50, 75, 100 cases/s puis MAX (autant de pas que possible, avec un budget de 10 ms de calcul par image). Entraînement jusqu'à 10 millions de parties (de million en million après le premier). L'aide clavier de la partie a une ligne par touche ; P, V et T s'affichent en vert si actifs, en orange sinon.
 - **ENTRAINEMENT** : la liste des modèles et leur détail ; créer un modèle (nom, γ, ε minimal, `PAS_CIBLE`, plateau, nombre de parties) ou continuer un modèle existant « de X jusqu'à Y parties ». `src/training.py` joue les parties **par tranches** de 25 ms entre deux images, avec la même `play_session` que `-visual off` : la fenêtre reste fluide sans thread. Arrêter, fermer ou Ctrl+C sauvegarde ce qui est déjà joué.
-- **EVALUATION** : l'agent figé enchaîne les parties jusqu'à ce qu'une partie atteigne une longueur de 35 (le bonus le plus haut du sujet). Cette partie n'est pas coupée : elle va jusqu'à sa fin, puis on affiche les statistiques de toutes les parties. `src/evaluation.py` photographie chaque pas : sur l'écran des résultats, ← et → rejouent la partie coup par coup.
+- **Option VISION = PLATEAU (hors sujet)** : à la création d'un modèle, on peut lui faire recevoir, en plus de la croix, deux faits calculés sur tout le plateau par `src/environment/plateau_complet.py` : pour chaque direction, si la case mène à un piège (remplissage depuis cette case : moins de cases libres que sa longueur), et l'écart vers la pomme verte la plus proche. L'interpréteur les remet dans le repère du serpent (`encode_complet`) ; la clé de la table devient par exemple `R2|G2|W3|P010|A+-`. Le fichier du modèle enregistre `"vision": "plateau"`, et un avertissement rouge s'affiche partout où ce modèle sert (et dans le terminal avec `-load`).
+- **EVALUATION** : l'agent figé enchaîne les parties jusqu'à ce qu'une partie atteigne la longueur OBJECTIF, réglable de 5 en 5 dans l'écran (35 par défaut, le bonus le plus haut du sujet). Cette partie n'est pas coupée : elle va jusqu'à sa fin, puis on affiche les statistiques de toutes les parties. `src/evaluation.py` photographie chaque pas : sur l'écran des résultats, ← et → rejouent la partie coup par coup.
 
 ---
 
@@ -357,10 +358,12 @@ Tout est détaillé avec les chiffres dans `IA.md` §6.8. En résumé :
 | rembobinage + longueur (+ virages) | atteint le plafond plus vite, sans le dépasser |
 | bonus pour l'espace libre visible | aucun effet |
 | Double Q-learning (deux tables pour corriger la surestimation) | moins bien : 23,9 contre 28,3 à 3 000 parties, 25,9 contre 27,6 à 20 000 |
+| réseau de neurones (DQN) qui lit toute la croix | aussi bien, pas mieux : 28,3 à 3 000 parties, 27 à 28 à 20 000 ; il meurt même contre les murs |
+| *contre-épreuve hors sujet : lui dire si une case est un piège et où est la pomme, calculé sur tout le plateau* | ***38,9** contre 27,6 à 20 000 parties : le plafond saute, ce qui prouve que la limite est la vision* |
 
 **Conclusion :** tout converge vers environ 29,5. La limite vient de ce que le serpent voit, pas de la façon dont il apprend. Pour aller plus loin, il faudrait lui montrer la forme de son corps, ce que la règle de vision interdit.
 
-**Une piste écartée volontairement :** une récompense calculée sur l'espace libre de **tout** le plateau. Défendable, puisque la récompense vient de l'environnement, mais elle aurait pu être lue comme une fuite d'information hors de la croix. On ne prend aucun risque sur le −42.
+**La contre-épreuve (hors sujet) :** une option `VISION = PLATEAU`, choisie à la création d'un modèle, lui donne en plus deux faits calculés sur tout le plateau : pour chaque coup, si la case mène à un piège, et de quel côté est la pomme. Avec la même table Q, il passe de 27,6 à **38,9** à 20 000 parties. C'est la preuve que la limite vient de ce qu'il voit. L'option est signalée en rouge partout où un tel modèle sert, et aucun modèle rendu ne l'utilise.
 
 ---
 
@@ -371,7 +374,7 @@ Tout est détaillé avec les chiffres dans `IA.md` §6.8. En résumé :
 3. **Étapes 6 à 12, écrites par Claude** et commentées pour la soutenance : choisir, apprendre, α, l'apprentissage en fin de partie, ε, la sauvegarde, le branchement dans le programme.
 4. **BAA en 3 itérations** sur ce code : les bugs de la section 4, 267 tests, 92 % des bugs introduits exprès détectés. Verdict final : GO.
 5. **Modèles** : 1, 10, 100, 1 000 et 10 000 sessions, puis `infini.txt` (3 h d'entraînement, 3,4 millions de parties).
-6. **Douze pistes d'amélioration** testées et mesurées (section 5), documentées dans `IA.md` §6.8.
+6. **Treize pistes d'amélioration** testées et mesurées (section 5), documentées dans `IA.md` §6.8.
 
 **Les commits** (du plus ancien au plus récent) :
 
@@ -414,13 +417,13 @@ e3ea186  docs: corriger le cours d'apres les mesures de l'agent   ┘
 ./snake -visual off -sessions 100 -baseline random
 ```
 
-Touches en mode graphique : **N** un pas (en mode pas-à-pas), **P** active ou coupe le pas-à-pas, **Espace** pause, **R** recommencer, **V** afficher la vision, **T** trace dans le terminal, **+ / −** vitesse, **Échap** retour au lobby.
+Touches en mode graphique : **N** (ou **→** avec l'IA en pas-à-pas) un pas, et passe en pas-à-pas s'il ne l'était pas ; **←** revoit le pas précédent (on ne fait que montrer les photos des 1000 derniers pas : ni la partie ni l'apprentissage ne sont rejoués) ; **P** active ou coupe le pas-à-pas, **Espace** pause, **R** recommencer, **V** afficher la vision, **T** trace dans le terminal, **+ / −** vitesse, **Échap** retour au lobby.
 
 ---
 
 ## 8. Ce qui reste à faire
 
-1. **Commiter `IA.md`** (la section des douze pistes) et **ce document**.
+1. **Commiter `IA.md`** (la section des treize pistes) et **ce document**.
 2. **Pousser** les commits locaux sur GitHub : le sujet ne note que ce qui est dans le dépôt.
 3. **Les 4 tests manquants** relevés par le dernier audit (non bloquants) : code de sortie après un échec de `-save` en mode graphique, valeur exacte de la borne des compteurs, dossier sans droit « x », fichier temporaire qui serait un dossier.
 
@@ -465,7 +468,7 @@ La première fois, on prend l'observation en entier (α = 1). Plus un couple est
 Du Q-learning tabulaire : la cible utilise la **meilleure** action suivante (`max`), même si le coup réellement joué ensuite était un coup d'exploration. C'est ce qu'on appelle « off-policy ». SARSA, lui, utiliserait le coup réellement joué.
 
 **Pourquoi le serpent plafonne vers 29 ?**
-Il ne voit qu'une ligne et une colonne, pas la forme de son corps. Deux positions différentes donnent la même croix : il joue pareil dans les deux, et s'enferme dans l'une. À 10 000 parties, 97 % des morts sont contre son corps. Douze pistes ont été testées : aucune ne passe ce plafond.
+Il ne voit qu'une ligne et une colonne, pas la forme de son corps. Deux positions différentes donnent la même croix : il joue pareil dans les deux, et s'enferme dans l'une. À 10 000 parties, 97 % des morts sont contre son corps. Treize pistes ont été testées : aucune ne passe ce plafond.
 
 **`-dontlearn` modifie-t-il le modèle ?**
 Non. L'agent figé ne note rien, ne corrige rien, et lit la table sans jamais y ajouter d'état. Le fichier reste identique octet pour octet, et un test le vérifie.
