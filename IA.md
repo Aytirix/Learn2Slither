@@ -770,9 +770,18 @@ Le rembobinage, comparé à un entraînement normal **au même nombre de pas** (
 - Le rembobinage **n'apporte rien à la référence** : à expérience égale, on obtient le même 29,1. Il **aide vraiment C et A + C**, qui manquent justement d'exemples de fins de partie : c'est le seul gain du projet qui dépasse nettement le bruit. Mais il les amène au même plafond, plus vite, sans le relever.
 - Le bonus d'espace libre ne change rien.
 
+**Douzième piste : le Double Q-learning** (van Hasselt, 2010). Le Q-learning surestime les notes quand le jeu contient du hasard, parce que la cible prend le `max` de valeurs bruitées. Le Double Q-learning tient deux tables : l'une choisit la meilleure action suivante, l'autre l'évalue, et on joue avec leur somme. Mesuré avec la même méthode (évaluation figée sur 200 parties) :
+
+| | 3 000 parties (8 graines) | 20 000 parties (4 graines) |
+|---|---|---|
+| Q-learning (code livré) | **28,3** (écart-type 2,9) | **27,6** (2,1) |
+| Double Q-learning | 23,9 (3,6) | 25,9 (4,7) |
+
+Il fait moins bien, sur 6 graines sur 8 à 3 000 parties. Chaque table ne reçoit que la moitié des corrections, donc il apprend plus lentement ; et la surestimation n'est pas notre problème : le serpent meurt piégé, pas parce qu'il croit un coup meilleur qu'il n'est.
+
 Tout converge vers **environ 29,5**. Savoir qu'il est long, qu'il s'enroule, ou revivre ses fins de partie ne suffit pas : pour éviter de s'enfermer, il faudrait voir la **forme** de son corps, et la croix ne la montre pas.
 
-**À retenir pour la soutenance :** onze idées testées et mesurées, de la plus simple (régler γ) à la plus ambitieuse (lui donner sa longueur et sa tendance à s'enrouler, et lui faire revivre ses fins de partie). Aucune ne franchit le plafond de 29,5, et toutes l'expliquent de la même façon : la limite vient de ce que le serpent voit, pas de la façon dont il apprend. Pour aller plus loin, il faudrait lui montrer la forme de son corps, ce que la règle de vision du sujet interdit.
+**À retenir pour la soutenance :** douze idées testées et mesurées, de la plus simple (régler γ) à la plus ambitieuse (lui donner sa longueur et sa tendance à s'enrouler, et lui faire revivre ses fins de partie). Aucune ne franchit le plafond de 29,5, et toutes l'expliquent de la même façon : la limite vient de ce que le serpent voit, pas de la façon dont il apprend. Pour aller plus loin, il faudrait lui montrer la forme de son corps, ce que la règle de vision du sujet interdit.
 
 ---
 
