@@ -65,20 +65,123 @@ class TestBornes(unittest.TestCase):
         self.assertEqual(config.size, 50)
         self.assertEqual(GameConfig(size=999).size, 50)
 
-    def test_vitesse_jusqu_a_100(self):
+    def test_plateau_de_5_en_5(self):
+        config = GameConfig(size=5)
+        vues = [config.size]
+        for _ in range(12):
+            config.change_size(1)
+            vues.append(config.size)
+        self.assertEqual(vues[:10], list(range(5, 51, 5)))
+        self.assertEqual(vues[-1], 50)
+        # Taille hors liste (-size 12) : cran voisin, sans en sauter un.
+        config = GameConfig(size=12)
+        config.change_size(1)
+        self.assertEqual(config.size, 15)
+        config = GameConfig(size=12)
+        config.change_size(-1)
+        self.assertEqual(config.size, 10)
+
+    def test_crans_de_vitesse(self):
         config = GameConfig(speed=1)
-        for _ in range(50):
+        vues = [config.speed]
+        for _ in range(15):
             config.change_speed(1)
-        self.assertEqual(config.speed, 100.0)
+            vues.append(config.speed)
+        self.assertEqual(vues[:11], [1, 5, 10, 15, 20, 30, 40, 50, 75, 100,
+                                     cfg.VITESSE_MAX])
+        self.assertEqual(vues[-1], cfg.VITESSE_MAX)
         self.assertEqual(GameConfig(speed=1e9).speed, 100.0)
+        self.assertEqual(GameConfig(speed=float("inf")).speed,
+                         cfg.VITESSE_MAX)
+        self.assertEqual(GameConfig(speed=float("nan")).speed,
+                         cfg.DEFAULT_SPEED)
+        self.assertEqual(cfg.libelle_vitesse(cfg.VITESSE_MAX), "MAX")
+        self.assertEqual(cfg.libelle_vitesse(15.0), "15 / s")
 
-    def test_jeu_accelere_jusqu_a_100(self):
+    def test_jeu_memes_crans_que_le_lobby(self):
         from src.interface.game import Game
-        game = Game(GameConfig(pilot=cfg.PILOT_HUMAN, trace=False))
-        for _ in range(100):
-            game.change_speed(1.25)
-        self.assertEqual(game.speed, 100.0)
+        game = Game(GameConfig(pilot=cfg.PILOT_HUMAN, speed=6,
+                               trace=False))
+        game.change_speed(1)
+        self.assertEqual(game.speed, 10)
+        game.change_speed(-1)
+        self.assertEqual(game.speed, 5)
+        for _ in range(20):
+            game.change_speed(1)
+        self.assertEqual(game.speed, cfg.VITESSE_MAX)
 
+    def test_vitesse_max_avance_sans_boucle_infinie(self):
+        from src.interface.game import Game
+        game = Game(GameConfig(pilot=cfg.PILOT_HUMAN, speed=float("inf"),
+                               size=50, trace=False, seed=1))
+        self.assertEqual(game.progress(), 1.0)
+        game.update(1 / 60)
+        self.assertGreater(game.board.steps, 1)
+
+    def test_parties_jusqu_a_dix_millions(self):
+        from src.interface.training_view import AJOUTS
+        self.assertEqual(AJOUTS[-1], 10_000_000)
+        apres = AJOUTS[AJOUTS.index(1_000_000):]
+        self.assertEqual(list(apres),
+                         [n * 1_000_000 for n in range(1, 11)])
+        self.assertEqual(list(AJOUTS), sorted(set(AJOUTS)))
+
+
+class TestPasAPas(unittest.TestCase):
+    def _game(self, speed=5):
+        from src.interface.game import Game
+        return Game(GameConfig(pilot=cfg.PILOT_HUMAN, speed=speed,
+                               trace=False))
+
+    def test_n_passe_en_pas_a_pas_et_avance(self):
+        game = self._game()
+        self.assertFalse(game.step_by_step)
+        game.request_step()
+        self.assertTrue(game.step_by_step)
+        for _ in range(60):
+            game.update(1 / 60)
+        self.assertEqual(game.board.steps, 1)
+
+    def test_corps_fini_d_animer_apres_un_pas(self):
+        """Bug : apres N, le corps restait a l'ancienne place."""
+        game = self._game()
+        game.request_step()
+        for _ in range(60):
+            game.update(1 / 60)
+        self.assertEqual(game.board.steps, 1)
+        self.assertEqual(game.progress(), 1.0)
+        from src.interface.board_view import cell_center
+        attendus = [cell_center(game.board.size, c)
+                    for c in game.board.snake]
+        for point, attendu in zip(game.snake_points(), attendus):
+            self.assertAlmostEqual(point[0], attendu[0])
+            self.assertAlmostEqual(point[1], attendu[1])
+
+    def test_pas_a_pas_a_vitesse_max(self):
+        game = self._game(speed=float("inf"))
+        game.request_step()
+        game.update(1 / 60)
+        game.update(1 / 60)
+        self.assertEqual(game.board.steps, 1)
+
+    def test_aide_coloree_selon_l_etat(self):
+        from src.interface import theme
+        from src.interface.panel_view import hints_for
+        game = self._game()
+        lignes = dict((t.split()[0], c) for t, c in hints_for(game))
+        self.assertEqual(lignes["P"], theme.ORANGE)
+        self.assertEqual(lignes["V"], theme.GREEN_APPLE)
+        game.toggle_step_mode()
+        game.show_vision = False
+        lignes = dict((t.split()[0], c) for t, c in hints_for(game))
+        self.assertEqual(lignes["P"], theme.GREEN_APPLE)
+        self.assertEqual(lignes["V"], theme.ORANGE)
+        textes = [t for t, _ in hints_for(game)]
+        self.assertTrue(any(t.startswith("R ") for t in textes))
+        self.assertFalse(any("/ P" in t or "V / T" in t for t in textes))
+
+
+class TestBornesSuite(unittest.TestCase):
     def test_100_cases_par_seconde_plusieurs_pas_par_image(self):
         from src.interface.game import Game
         game = Game(GameConfig(pilot=cfg.PILOT_HUMAN, speed=100, size=50,
@@ -287,6 +390,146 @@ class TestPartieEvaluation(unittest.TestCase):
         game.restart()
         self.assertTrue(game.fini)
 
+    def test_pause_courte_si_objectif_rate(self):
+        game, _ = self.partie(seuil=4)
+        for vitesse in (1.0, 10.0, 100.0, float("inf")):
+            game.speed = vitesse
+            game.termine = False
+            rate = game.pause_fin
+            game.termine = True
+            self.assertLessEqual(rate, 0.4)
+            self.assertLessEqual(rate, game.pause_fin)
+            if vitesse >= 40:
+                self.assertEqual(rate, 0.0)
+
+    def test_pas_d_ecran_de_fin_a_grande_vitesse(self):
+        game, _ = self.partie(seuil=10_000)
+        game.speed = 40.0
+        with silence():
+            for _ in range(5_000):
+                game.update(0.05)
+                self.assertTrue(game.board.alive)
+        self.assertGreater(game.bilan.stats.games, 1)
+
+
+class TestRetourEnArriere(unittest.TestCase):
+    """Pas a pas avec l'IA : GAUCHE recule, DROITE avance."""
+
+    def partie(self):
+        from src.interface.game import Game
+        agent = Agent(rng=random.Random(0))
+        config = GameConfig(trace=False, speed=100, seed=0, size=20)
+        game = Game(config, agent)
+        game.toggle_step_mode()
+        return game, agent
+
+    def pas(self, game, n):
+        for _ in range(n):
+            loop.handle_key(game, pygame.K_RIGHT)
+            game.update(0.05)
+
+    def test_gauche_puis_droite_revient_au_meme_present(self):
+        game, agent = self.partie()
+        self.pas(game, 5)
+        self.assertEqual(game.board.steps, 5)
+        present = (list(game.board.snake), list(game.board.greens),
+                   game.board.idle, game.board.direction)
+        appris = agent.pas_total
+        for attendu in (4, 3, 2):
+            loop.handle_key(game, pygame.K_LEFT)
+            game.update(0.05)
+            self.assertEqual(game.board.steps, attendu)
+        self.assertEqual(game.recul, 3)
+        # On regarde le passe : rien n'est joue ni appris.
+        for _ in range(30):
+            game.update(0.05)
+        self.assertEqual(game.board.steps, 2)
+        self.assertEqual(agent.pas_total, appris)
+        self.pas(game, 3)
+        self.assertEqual(game.recul, 0)
+        self.assertEqual(agent.pas_total, appris)
+        self.assertEqual((list(game.board.snake), list(game.board.greens),
+                          game.board.idle, game.board.direction), present)
+        # Au present, DROITE joue de nouveau un vrai pas.
+        self.pas(game, 1)
+        self.assertEqual(game.board.steps, 6)
+        self.assertEqual(agent.pas_total, appris + 1)
+
+    def test_gauche_s_arrete_au_debut(self):
+        game, _ = self.partie()
+        self.pas(game, 2)
+        for _ in range(10):
+            loop.handle_key(game, pygame.K_LEFT)
+        self.assertEqual(game.board.steps, 0)
+        self.assertEqual(game.recul, 2)
+
+    def test_quitter_le_pas_a_pas_revient_au_present(self):
+        game, _ = self.partie()
+        self.pas(game, 3)
+        loop.handle_key(game, pygame.K_LEFT)
+        loop.handle_key(game, pygame.K_p)
+        self.assertEqual((game.recul, game.board.steps), (0, 3))
+
+    def test_gauche_sans_effet_hors_pas_a_pas(self):
+        game, _ = self.partie()
+        self.pas(game, 2)
+        game.toggle_step_mode()
+        loop.handle_key(game, pygame.K_LEFT)
+        self.assertEqual(game.recul, 0)
+
+    def test_au_clavier_les_fleches_dirigent_toujours(self):
+        from src.interface.game import Game
+        game = Game(GameConfig(pilot=cfg.PILOT_HUMAN, trace=False, seed=1))
+        game.toggle_step_mode()
+        cap = game.board.direction
+        fleche = pygame.K_UP if cap in (bd.LEFT, bd.RIGHT) else \
+            pygame.K_LEFT
+        loop.handle_key(game, fleche)
+        self.assertEqual(game.recul, 0)
+        self.assertEqual(len(game.pending), 1)
+
+    def test_en_pas_a_pas_la_fin_attend_n(self):
+        from src.interface.game import Game
+        game = Game(GameConfig(pilot=cfg.PILOT_HUMAN, trace=False, seed=1,
+                               speed=100), None)
+        game.config.sessions = game.sessions = 3
+        game.toggle_step_mode()
+        with silence():
+            while game.board.alive:
+                game.pas_suivant()
+                game.update(0.05)
+        for _ in range(100):
+            game.update(0.05)
+        self.assertEqual(game.session, 1)
+        self.assertIn("[N]", game.fin_hint)
+        game.pas_suivant()
+        game.update(0.05)
+        self.assertEqual(game.session, 2)
+
+
+class TestObjectifEvaluation(unittest.TestCase):
+    def test_reglage_de_5_en_5_defaut_35(self):
+        config = GameConfig()
+        self.assertEqual(config.objectif, 35)
+        config.change_objectif(1)
+        self.assertEqual(config.objectif, 40)
+        for _ in range(50):
+            config.change_objectif(-1)
+        self.assertEqual(config.objectif, 5)
+
+    def test_l_evaluation_utilise_l_objectif_choisi(self):
+        pygame.init()
+        app = loop.Application(
+            pygame.display.set_mode((1, 1)), GameConfig(trace=False))
+        app.eval_config.objectif = 10
+        app.eval_config.model = None
+        app._lancer_evaluation()
+        self.assertEqual(app.eval_game.bilan.seuil, 10)
+        champs = [c.label for c in app.eval_setup.formulaire.champs]
+        self.assertIn("OBJECTIF", champs)
+        self.assertNotIn("OBJECTIF",
+                         [c.label for c in app.lobby.formulaire.champs])
+
 
 class TestAidesDesParametres(unittest.TestCase):
     def test_gamma(self):
@@ -454,7 +697,7 @@ class TestApplication(DossierModeles):
         touche(self.app, pygame.K_n)
         self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
                                                  text="neuf"))
-        touche(self.app, pygame.K_DOWN, 6)          # PARTIES A JOUER
+        touche(self.app, pygame.K_DOWN, 7)          # PARTIES A JOUER
         touche(self.app, pygame.K_LEFT, 10)         # au minimum : 10
         touche(self.app, pygame.K_RETURN)
         self.assertEqual(self.app.training.vue, "en_cours")
@@ -473,7 +716,7 @@ class TestApplication(DossierModeles):
         touche(self.app, pygame.K_n)
         self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
                                                  text="regle"))
-        touche(self.app, pygame.K_DOWN)             # GAMMA
+        touche(self.app, pygame.K_DOWN, 2)          # GAMMA
         touche(self.app, pygame.K_LEFT, 30)
         touche(self.app, pygame.K_DOWN)             # EPSILON MINIMAL
         touche(self.app, pygame.K_RIGHT, 30)
@@ -492,6 +735,42 @@ class TestApplication(DossierModeles):
                           agent.q.valeur_initiale), (0.0, 1.0, 0.0))
         self.assertEqual(models.infos("models/regle.txt").valeur_initiale,
                          0.0)
+
+    def test_creer_un_modele_qui_voit_tout(self):
+        touche(self.app, pygame.K_DOWN)
+        touche(self.app, pygame.K_RETURN)
+        touche(self.app, pygame.K_n)
+        self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
+                                                 text="tout"))
+        touche(self.app, pygame.K_DOWN)             # VISION
+        touche(self.app, pygame.K_RIGHT)            # PLATEAU
+        self.assertEqual(self.app.training.vision, "plateau")
+        touche(self.app, pygame.K_DOWN, 6)          # PARTIES A JOUER
+        touche(self.app, pygame.K_LEFT, 10)
+        self.image()
+        touche(self.app, pygame.K_RETURN)
+        for _ in range(500):
+            self.image()
+            if self.app.training.vue != "en_cours":
+                break
+        self.assertTrue(modele.charger("models/tout.txt").vision_complete)
+        self.assertTrue(models.voit_tout("models/tout.txt"))
+        # Evaluation avec ce modele : averti jusque dans les resultats.
+        self.app.state = loop.SCREEN_MENU
+        self.app.menu.index = 0                     # focus sur JOUER
+        touche(self.app, pygame.K_DOWN, 2)
+        touche(self.app, pygame.K_RETURN)
+        self.app.eval_config.model = "models/tout.txt"
+        self.image()
+        touche(self.app, pygame.K_DOWN)
+        with silence():
+            touche(self.app, pygame.K_RETURN)
+        self.assertTrue(self.app.eval_game.vision_complete)
+        self.image(3)
+        with silence():
+            touche(self.app, pygame.K_ESCAPE)
+        self.assertTrue(self.app.results.voit_tout)
+        self.image()
 
     def test_nom_deja_pris_refuse(self):
         touche(self.app, pygame.K_DOWN)
@@ -523,7 +802,7 @@ class TestApplication(DossierModeles):
         touche(self.app, pygame.K_n)
         self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
                                                  text="coupe"))
-        touche(self.app, pygame.K_DOWN, 6)
+        touche(self.app, pygame.K_DOWN, 7)
         touche(self.app, pygame.K_RIGHT, 20)
         touche(self.app, pygame.K_RETURN)
         self.image(2)

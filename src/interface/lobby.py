@@ -5,7 +5,7 @@ import pygame
 from .. import config as cfg
 from .. import models
 from . import widgets
-from .model_card import parties
+from .model_card import avertir, parties
 from .widgets import QUIT, START  # noqa: F401  (reexportes pour loop.py)
 
 PILOT_LABELS = {cfg.PILOT_AI: "IA", cfg.PILOT_HUMAN: "JOUEUR"}
@@ -37,17 +37,17 @@ class Lobby:
 
     def __init__(self, fonts, configuration, starfield, avec_pilote=True,
                  sous_titre="JOUER  ·  CONFIGURATION DE LA PARTIE",
-                 bouton="LANCER"):
+                 bouton="LANCER", avec_objectif=False):
         self.fonts = fonts
         self.config = configuration
         self.fond = widgets.Fond(starfield)
         self.sous_titre = sous_titre
         self.time_s = 0.0
         self.formulaire = widgets.Formulaire(
-            fonts, self._champs(avec_pilote), bouton, y=215
+            fonts, self._champs(avec_pilote, avec_objectif), bouton, y=215
         )
 
-    def _champs(self, avec_pilote):
+    def _champs(self, avec_pilote, avec_objectif):
         conf = self.config
         champs = []
         if avec_pilote:
@@ -71,10 +71,17 @@ class Lobby:
             ),
             widgets.Reglage(
                 "VITESSE",
-                lambda: "{:.0f} / s".format(conf.speed),
+                lambda: cfg.libelle_vitesse(conf.speed),
                 conf.change_speed,
             ),
         ]
+        if avec_objectif:
+            champs.append(widgets.Reglage(
+                "OBJECTIF",
+                lambda: str(conf.objectif),
+                conf.change_objectif,
+                aide="longueur a atteindre, sinon on rejoue",
+            ))
         return champs
 
     def _choisir_pilote(self, pilote):
@@ -99,6 +106,8 @@ class Lobby:
         self.fond.render(screen, self.time_s)
         widgets.titre(screen, self.fonts, "LEARN2SLITHER", self.sous_titre,
                       y=70)
+        if self.config.ai_driven and models.voit_tout(self.config.model):
+            avertir(screen, self.fonts, 192)
         self.formulaire.render(screen, self.time_s)
         widgets.aide(screen, self.fonts["label"], HINTS,
                      self.formulaire.bas + 26)

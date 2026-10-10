@@ -52,7 +52,8 @@ class Agent:
     """Agent Q-learning sur l'etat egocentrique de l'interpreteur."""
 
     def __init__(self, epsilon=1.0, rng=None, qtable=None, gamma=GAMMA,
-                 epsilon_min=EPSILON_MIN, pas_cible=PAS_CIBLE, apprend=True):
+                 epsilon_min=EPSILON_MIN, pas_cible=PAS_CIBLE, apprend=True,
+                 vision=it.VISION_CROIX):
         # Probabilite de jouer au hasard plutot que la meilleure action.
         self.epsilon = epsilon
         # Valeur de depart d'epsilon, avant toute decroissance (etape 10).
@@ -66,6 +67,12 @@ class Agent:
         self.gamma = gamma
         # Faux avec -dontlearn : l'agent joue mais n'apprend rien.
         self.apprend = apprend
+        # "croix" (le sujet) ou "plateau" (option HORS SUJET : l'agent
+        # recoit aussi des informations de tout le plateau, voir
+        # src/environment/plateau_complet.py).
+        if vision not in it.VISIONS:
+            raise ValueError("vision inconnue : {!r}".format(vision))
+        self.vision = vision
 
         # Etat de la partie en cours.
         self.cap = None              # direction actuelle du serpent
@@ -127,7 +134,7 @@ class Agent:
             raise RuntimeError(
                 "debut_partie(cap) doit etre appele avant le premier pas"
             )
-        etat = it.encode(vision, self.cap)
+        etat = self.encoder(vision, self.cap)
         action = self.choisir_action(etat)
         direction = it.tourner(self.cap, action)
 
@@ -162,10 +169,22 @@ class Agent:
             )
         # Apres le pas, le cap du serpent est la direction jouee : c'est
         # dans ce repere qu'on encode ce qu'il voit maintenant.
-        etat_suivant = None if mort else it.encode(vision_suivante, direction)
+        etat_suivant = (None if mort
+                        else self.encoder(vision_suivante, direction))
         self.trajectoire.append(
             (etat, action, recompense, etat_suivant, mort)
         )
+
+    @property
+    def vision_complete(self):
+        """Vrai si l'agent doit recevoir tout le plateau (hors sujet)."""
+        return self.vision == it.VISION_PLATEAU
+
+    def encoder(self, vision, cap):
+        """Etat de la table : la croix, plus le plateau si vision_complete."""
+        if self.vision_complete:
+            return it.encode_complet(vision, cap)
+        return it.encode(vision, cap)
 
     # -- Etape 7 : la mise a jour de Bellman (IA.md section 4) ---------------
 

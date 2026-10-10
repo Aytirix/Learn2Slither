@@ -59,6 +59,7 @@ class Infos:
         self.epsilon_min = agent.epsilon_min if agent else 0.0
         self.pas_cible = agent.pas_cible if agent else 0
         self.valeur_initiale = agent.q.valeur_initiale if agent else 0.0
+        self.vision = agent.vision if agent else "croix"
         try:
             self.octets = os.path.getsize(chemin)
         except OSError:
@@ -67,6 +68,12 @@ class Infos:
     @property
     def lisible(self):
         return self.erreur is None
+
+    @property
+    def voit_tout(self):
+        """Modele HORS SUJET : il recoit des informations de tout le
+        plateau (option VISION = PLATEAU a la creation)."""
+        return self.lisible and self.vision == "plateau"
 
 
 # Cache (chemin) -> (date de modification, taille, Infos) : la liste des
@@ -106,6 +113,11 @@ def meilleur_modele(directory=MODELS_DIR):
     if not lisibles:
         return None
     return max(lisibles, key=lambda i: i.parties).chemin
+
+
+def voit_tout(chemin):
+    """Vrai si le modele de `chemin` voit tout le plateau (hors sujet)."""
+    return bool(chemin) and infos(chemin).voit_tout
 
 
 def chemin_nouveau(nom, directory=MODELS_DIR):

@@ -52,9 +52,21 @@ class ErreurModele(ValueError):
 
 # -- Les cles : tuple <-> texte ----------------------------------------------
 
+SIGNES = {1: "+", 0: "0", -1: "-"}
+
+
 def etat_vers_texte(etat):
-    """(('R', 2), ('G', 2), ('W', 3))  ->  "R2|G2|W3"."""
-    return "|".join(symbole + str(distance) for symbole, distance in etat)
+    """(('R', 2), ('G', 2), ('W', 3))  ->  "R2|G2|W3".
+
+    Modele "plateau" (hors sujet), deux morceaux en plus, pieges et pomme :
+    (..., (0, 1, 0), (1, -1))  ->  "R2|G2|W3|P010|A+-".
+    """
+    morceaux = [symbole + str(distance) for symbole, distance in etat[:3]]
+    if len(etat) == 5:
+        pieges, pomme = etat[3], etat[4]
+        morceaux.append("P" + "".join(str(p) for p in pieges))
+        morceaux.append("A" + "".join(SIGNES[s] for s in pomme))
+    return "|".join(morceaux)
 
 
 def texte_vers_etat(texte):
@@ -63,9 +75,13 @@ def texte_vers_etat(texte):
     Le symbole est toujours un seul caractere ; tout ce qui suit est la
     distance, ce qui marcherait aussi si DISTANCE_MAX depassait 9.
     """
-    return tuple(
-        (morceau[0], int(morceau[1:])) for morceau in texte.split("|")
-    )
+    morceaux = texte.split("|")
+    etat = tuple((m[0], int(m[1:])) for m in morceaux[:3])
+    if len(morceaux) == 5:
+        signe = {v: k for k, v in SIGNES.items()}
+        etat += (tuple(int(c) for c in morceaux[3][1:]),
+                 tuple(signe[c] for c in morceaux[4][1:]))
+    return etat
 
 
 # -- Ecriture ----------------------------------------------------------------
@@ -114,6 +130,9 @@ def sauvegarder(agent, chemin):
         "version_encodage": it.VERSION_ENCODAGE,
         "distance_max": it.DISTANCE_MAX,
         "regle": REGLE,
+        # "croix" : conforme au sujet. "plateau" : HORS SUJET, l'agent
+        # recoit aussi des informations de tout le plateau.
+        "vision": agent.vision,
         "hyperparametres": {
             "gamma": agent.gamma,
             "alpha": "1/n^0.7",
@@ -158,8 +177,12 @@ def charger(chemin, rng=None):
     """
     donnees = _lire_json(chemin)
     _verifier_compatibilite(donnees, chemin)
+    # Un modele d'avant cette option n'a pas de champ "vision" : la croix.
+    vision = donnees.get("vision", it.VISION_CROIX)
+    if vision not in it.VISIONS:
+        raise ErreurModele("{} : vision inconnue {!r}".format(chemin, vision))
     try:
-        hyper, q = _lire_contenu(donnees)
+        hyper, q = _lire_contenu(donnees, vision)
     except (KeyError, TypeError, ValueError, AttributeError, IndexError,
             OverflowError) as erreur:
         raise ErreurModele("{} est corrompu : {}".format(chemin, erreur))
@@ -170,6 +193,7 @@ def charger(chemin, rng=None):
         gamma=hyper["gamma"],
         epsilon_min=hyper["epsilon_min"],
         pas_cible=hyper["pas_cible"],
+        vision=vision,
     )
     agent.parties = donnees["parties"]
     agent.pas_total = donnees["pas_total"]
@@ -179,7 +203,7 @@ def charger(chemin, rng=None):
     return agent
 
 
-def _lire_contenu(donnees):
+def _lire_contenu(donnees, vision=it.VISION_CROIX):
     """Valide TOUT le contenu et reconstruit la table.
 
     Chaque valeur est controlee ici, au chargement : un modele corrompu doit
@@ -198,7 +222,7 @@ def _lire_contenu(donnees):
 
     q = QTable(valeur_initiale=hyper["valeur_initiale"])
     for texte, ligne in donnees["qtable"].items():
-        etat = _etat_valide(texte)
+        etat = _etat_valide(texte, vision)
         valeurs = [_nombre(v, "valeur") for v in ligne["valeurs"]]
         visites = ligne["visites"]
         if len(valeurs) != len(it.ACTIONS) or len(visites) != len(it.ACTIONS):
@@ -236,16 +260,24 @@ def _compteur(valeur, nom):
     return valeur
 
 
-def _etat_valide(texte):
-    """Cle de table relue, verifiee : 3 couples (symbole connu, distance)."""
+def _etat_valide(texte, vision=it.VISION_CROIX):
+    """Cle de table relue, verifiee : 3 couples (symbole connu, distance),
+    plus pieges et pomme pour un modele "plateau"."""
+    attendu = 5 if vision == it.VISION_PLATEAU else 3
+    if texte.count("|") != attendu - 1:
+        raise ValueError("cle {!r} : {} morceaux attendus".format(
+            texte, attendu))
     etat = texte_vers_etat(texte)
     if etat_vers_texte(etat) != texte:
         # Refuse "R 2", "R+2", "R02"... : deux ecritures du meme etat
         # fusionneraient sans rien dire.
         raise ValueError("cle {!r} non canonique".format(texte))
-    if len(etat) != 3:
-        raise ValueError("cle {!r} : 3 directions attendues".format(texte))
-    for symbole, distance in etat:
+    if attendu == 5:
+        pieges, pomme = etat[3], etat[4]
+        if (len(pieges) != 3 or any(p not in (0, 1) for p in pieges)
+                or len(pomme) != 2):
+            raise ValueError("cle {!r} invalide".format(texte))
+    for symbole, distance in etat[:3]:
         if symbole not in "WSGR" or not 1 <= distance <= it.DISTANCE_MAX:
             raise ValueError("cle {!r} invalide".format(texte))
     return etat

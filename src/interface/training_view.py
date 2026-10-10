@@ -15,11 +15,13 @@ import pygame
 from .. import config as cfg
 from .. import models
 from ..agent import agent as ag
+from ..agent import interpreter as it
 from ..agent import modele
 from ..agent import qtable as qt
 from ..training import Entrainement
 from . import gfx, theme, widgets
-from .model_card import ListeModeles, carte_details, entier, parties
+from .model_card import (ListeModeles, avertir, carte_details, entier,
+                         parties)
 
 LISTE = "liste"
 NOUVEAU = "nouveau"
@@ -40,9 +42,10 @@ EPSILONS_MIN = (0.0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5,
                 0.75, 1.0)
 VALEURS_INITIALES = (-50, -20, -10, -5, -1, 0, 0.5, 1, 2, 5, 10, 20, 50)
 PAS_CIBLES = (1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000)
-# Parties a ajouter : 10, 20, 50, 100, 200, 500... jusqu'a un million.
+# Parties a ajouter : 10, 20, 50, 100, 200, 500... jusqu'a un million, puis
+# de million en million jusqu'a dix millions.
 AJOUTS = tuple(base * 10 ** e for e in range(1, 6) for base in (1, 2, 5)) \
-    + (1_000_000,)
+    + tuple(n * 1_000_000 for n in range(1, 11))
 AJOUT_DEFAUT = 1_000
 
 # Explications courtes affichees sous chaque parametre (IA.md pour le
@@ -81,6 +84,12 @@ def aide_epsilon_min(epsilon):
         return "{:g} = {:.0f} % des coups au hasard".format(
             epsilon, 100 * epsilon)
     return "{:g} = 1 coup sur {:.0f} au hasard".format(epsilon, 1 / epsilon)
+
+
+def aide_vision(vision):
+    if vision == it.VISION_PLATEAU:
+        return "HORS SUJET : recoit aussi tout le plateau"
+    return "conforme au sujet : les 4 rayons seulement"
 
 
 class Choix:
@@ -136,10 +145,16 @@ class TrainingScreen:
         self.pas_cible = Choix(PAS_CIBLES, ag.PAS_CIBLE)
         self.valeur_initiale = Choix(VALEURS_INITIALES,
                                      qt.VALEUR_INITIALE)
-        self.taille = Choix(tuple(range(cfg.MIN_SIZE, cfg.MAX_SIZE + 1)), 10)
+        self.taille = Choix(cfg.TAILLES, 10)
         self.ajout = Choix(AJOUTS, AJOUT_DEFAUT)
+        self.vision = it.VISION_CROIX
         champs = [
             self.nom,
+            widgets.Pilules(
+                "VISION",
+                [(it.VISION_CROIX, "CROIX"), (it.VISION_PLATEAU, "PLATEAU")],
+                lambda: self.vision, self._choisir_vision,
+                aide=lambda: aide_vision(self.vision)),
             widgets.Reglage("GAMMA",
                             lambda: "{:g}".format(self.gamma.valeur),
                             self.gamma.changer,
@@ -163,7 +178,7 @@ class TrainingScreen:
         ]
         self.formulaire = widgets.Formulaire(
             self.fonts, champs, "CREER ET ENTRAINER", y=125,
-            hauteur_ligne=52)
+            hauteur_ligne=46)
         self.vue = NOUVEAU
 
     def _ouvrir_continuer(self):
@@ -175,7 +190,7 @@ class TrainingScreen:
                        "continuer", ok=False)
             return
         self.message = ""
-        self.taille = Choix(tuple(range(cfg.MIN_SIZE, cfg.MAX_SIZE + 1)), 10)
+        self.taille = Choix(cfg.TAILLES, 10)
         self.ajout = Choix(AJOUTS, AJOUT_DEFAUT)
         depart = infos.parties
         champs = [
@@ -195,6 +210,9 @@ class TrainingScreen:
         self.formulaire = widgets.Formulaire(
             self.fonts, champs, "ENTRAINER", y=230)
         self.vue = CONTINUER
+
+    def _choisir_vision(self, vision):
+        self.vision = vision
 
     def _champ_taille(self):
         return widgets.Reglage(
@@ -217,7 +235,8 @@ class TrainingScreen:
             rng=random.Random(), gamma=self.gamma.valeur,
             epsilon_min=self.epsilon_min.valeur,
             pas_cible=self.pas_cible.valeur,
-            qtable=qt.QTable(valeur_initiale=self.valeur_initiale.valeur))
+            qtable=qt.QTable(valeur_initiale=self.valeur_initiale.valeur),
+            vision=self.vision)
         self._lancer(agent, models.chemin_nouveau(nom))
 
     def _lancer_continuer(self):
@@ -361,6 +380,8 @@ class TrainingScreen:
                 "{}  ·  DEJA {}  ·  GAMMA {:g}  ·  PAS CIBLE {}"
                 .format(infos.nom.upper(), parties(infos.parties).upper(),
                         infos.gamma, entier(infos.pas_cible)), y=60)
+            if infos.voit_tout:
+                avertir(screen, self.fonts, 190)
         self.formulaire.render(screen, self.time_s)
         widgets.aide(screen, self.fonts["label"], HINTS_FORMULAIRE,
                      self.formulaire.bas + 40)
@@ -371,6 +392,8 @@ class TrainingScreen:
         widgets.titre(screen, self.fonts, "ENTRAINEMENT",
                       "{}  ·  PLATEAU {} x {}".format(
                           nom, run.board.size, run.board.size), y=10)
+        if run.agent.vision_complete:
+            avertir(screen, self.fonts, 118)
         carte = pygame.Rect(140, 140, theme.WIN_W - 280, 440)
         gfx.card(screen, carte, theme.BG_CARD, theme.BORDER, 18)
         x, y = carte.x + 30, carte.y + 26
@@ -419,8 +442,13 @@ class TrainingScreen:
                       (rect.x + 12, rect.y + 8), theme.TEXT_MUTED)
         if len(points) < 2:
             return
-        haut = max(max(points), 1.0)
         zone = rect.inflate(-24, -40).move(0, 10)
+        # 10 millions de parties = 100 000 points : on n'en garde qu'environ
+        # un par pixel, sinon chaque image recalculerait toute la courbe.
+        pas = max(1, len(points) // max(1, zone.width))
+        if pas > 1:
+            points = points[::pas] + [points[-1]]
+        haut = max(max(points), 1.0)
         coords = [
             (zone.x + zone.width * i / (len(points) - 1),
              zone.bottom - zone.height * p / haut)

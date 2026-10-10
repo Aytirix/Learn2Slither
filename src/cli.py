@@ -56,7 +56,8 @@ def build_parser():
         "-size", type=int, default=10, help="taille du plateau (defaut : 10)"
     )
     extra.add_argument(
-        "-speed", type=float, default=6.0, help="cases par seconde"
+        "-speed", type=float, default=cfg.DEFAULT_SPEED,
+        help="cases par seconde (inf = vitesse maximale)"
     )
     extra.add_argument("-seed", type=int, default=None, help="graine")
     extra.add_argument(

@@ -2,8 +2,10 @@
 
 import pygame
 
+from .. import config as cfg
 from ..environment import board as bd
 from . import gfx, theme
+from .model_card import AVERTISSEMENT
 
 CHAR_COLORS = {
     bd.WALL_CHAR: theme.TEXT_MUTED,
@@ -16,23 +18,46 @@ CHAR_COLORS = {
 
 MANUAL_HINT = "FLECHES / ZQSD   diriger le serpent"
 
-HINTS = (
-    "ESPACE           pause  ·  rejouer",
-    "N / P            pas suivant  ·  mode pas a pas",
-    "V / T            vision  ·  trace terminal",
-    "+ / -  ·  R      vitesse  ·  nouvelle partie",
-    "ECHAP            retour au lobby",
-)
+
+def ligne_etat(touche, libelle, actif):
+    """Ligne d'aide d'un interrupteur : verte s'il est actif, orange sinon."""
+    texte = "{:<17}{}  ·  {}".format(
+        touche, libelle, "ACTIF" if actif else "INACTIF")
+    return texte, theme.GREEN_APPLE if actif else theme.ORANGE
 
 
 def hints_for(game):
-    """Aide clavier : les directions n'existent qu'en pilotage manuel."""
-    propres = getattr(game, "hints", None)
-    if propres is not None:
-        return propres
+    """Aide clavier, une touche par ligne : liste de (texte, couleur).
+
+    Les interrupteurs (P, V, T) montrent leur etat en couleur. Une partie
+    peut retirer ESPACE et R (`aide_complete`) et changer la ligne d'ECHAP
+    (`aide_sortie`), comme le fait l'evaluation.
+    """
+    neutre = theme.TEXT_MUTED
+    complete = getattr(game, "aide_complete", True)
+    lignes = []
     if game.manual:
-        return (MANUAL_HINT,) + HINTS
-    return HINTS
+        lignes.append((MANUAL_HINT, neutre))
+    if complete:
+        lignes.append(("ESPACE           pause  ·  rejouer", neutre))
+    if game.manual:
+        lignes.append(("N                pas suivant", neutre))
+    else:
+        lignes += [
+            ("N / DROITE       pas suivant", neutre),
+            ("GAUCHE           pas precedent  (en pas a pas)", neutre),
+        ]
+    lignes += [
+        ligne_etat("P", "mode pas a pas", game.step_by_step),
+        ligne_etat("V", "vision", game.show_vision),
+        ligne_etat("T", "trace terminal", game.trace),
+        ("+ / -            vitesse", neutre),
+    ]
+    if complete:
+        lignes.append(("R                nouvelle partie", neutre))
+    lignes.append(("ECHAP            " + getattr(
+        game, "aide_sortie", "retour au lobby"), neutre))
+    return lignes
 
 
 def etat_de_partie(board):
@@ -90,9 +115,18 @@ class PanelView:
             caption += "  ·  SESSION {}/{}".format(
                 game.session, game.sessions
             )
-        sub = self.fonts["sub"].render(caption, True, theme.ACCENT)
+        recul = getattr(game, "recul", 0)
+        if recul:
+            caption += "  ·  RETOUR {} PAS EN ARRIERE".format(recul)
+        sub = self.fonts["sub"].render(
+            caption, True, theme.ORANGE if recul else theme.ACCENT)
         self.screen.blit(title, (x, y))
         self.screen.blit(sub, (x, y + 38))
+        if getattr(game, "vision_complete", False):
+            # Modele hors sujet : rappele en permanence pendant la partie.
+            alerte = self.fonts["label"].render(AVERTISSEMENT, True,
+                                                theme.RED_APPLE)
+            self.screen.blit(alerte, (x, y + 56))
         return y + 74
 
     def _stats(self, game, x, y):
@@ -100,7 +134,7 @@ class PanelView:
             ("LONGUEUR", str(len(game.board.snake))),
             ("RECORD", str(game.best_length)),
             ("DUREE", str(game.board.steps)),
-            ("VITESSE", "{:.1f}/s".format(game.speed)),
+            ("VITESSE", cfg.libelle_vitesse(game.speed).replace(" ", "")),
         )
         cw = (theme.PANEL_W - 12) // 2
         for i, (label, value) in enumerate(stats):
@@ -169,7 +203,7 @@ class PanelView:
             y += 26
 
         y += 10
-        for hint in hints_for(game):
-            surf = self.fonts["label"].render(hint, True, theme.TEXT_MUTED)
+        for hint, couleur in hints_for(game):
+            surf = self.fonts["label"].render(hint, True, couleur)
             self.screen.blit(surf, (x, y))
             y += 18

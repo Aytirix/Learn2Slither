@@ -18,6 +18,7 @@ import statistics
 from collections import Counter
 
 from .environment import board as bd
+from .environment.plateau_complet import observer
 
 # Plafond de securite de la boucle de jeu. `Board` tronque deja les parties
 # qui tournent en rond ; ce garde-fou-la protege contre un bug qui laisserait
@@ -102,15 +103,18 @@ def play_session(board, agent=None, reward_fn=None, trace=False):
         # quel sens celui-ci part (IA.md section 6.6).
         debut(board.direction)
 
+    # Un modele "plateau" (hors sujet) recoit aussi tout le plateau ; tous
+    # les autres agents, la croix seule.
+    complete = getattr(agent, "vision_complete", False)
     while board.alive and board.steps < MAX_STEPS_PER_SESSION:
-        vision = board.vision_chars()
+        vision = observer(board, complete)
         action = agent.choose(vision) if agent else board.direction
         event = board.step(action)
 
         if agent is not None and reward_fn is not None:
             learn = getattr(agent, "learn", None)
             if learn is not None:
-                after = vision if board.dead else board.vision_chars()
+                after = vision if board.dead else observer(board, complete)
                 learn(vision, action, reward_fn(event), after, board.dead)
 
         if trace:

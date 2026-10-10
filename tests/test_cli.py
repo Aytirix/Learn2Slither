@@ -6,6 +6,7 @@ import random
 import unittest
 
 from src import baselines, cli
+from src import config as cfg
 
 
 def config(argv):
@@ -59,11 +60,12 @@ class TestTraductionDesArguments(unittest.TestCase):
         self.assertTrue(config([]).visual)
 
     def test_vitesse_bornee(self):
-        """0 ou infini faisaient diviser par zero dans la boucle graphique."""
+        """0 faisait diviser par zero dans la boucle graphique ; l'infini
+        est desormais la vitesse MAX, traitee a part par le jeu."""
         self.assertEqual(config(["-speed", "0"]).speed, 1.0)
         self.assertEqual(config(["-speed", "1000"]).speed, 100.0)
-        self.assertEqual(config(["-speed", "inf"]).speed, 6.0)
-        self.assertEqual(config(["-speed", "nan"]).speed, 6.0)
+        self.assertEqual(config(["-speed", "inf"]).speed, cfg.VITESSE_MAX)
+        self.assertEqual(config(["-speed", "nan"]).speed, cfg.DEFAULT_SPEED)
 
     def test_taille_bornee(self):
         self.assertEqual(config(["-size", "1"]).size, 5)

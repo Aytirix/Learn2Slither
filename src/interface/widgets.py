@@ -141,8 +141,10 @@ class Reglage:
 class Pilules:
     """Choix entre quelques options affichees cote a cote."""
 
-    def __init__(self, label, options, lire, choisir, actif=_toujours):
+    def __init__(self, label, options, lire, choisir, actif=_toujours,
+                 aide=""):
         self.label = label
+        self.aide = aide
         self.options = options      # [(valeur, libelle), ...]
         self.lire = lire            # -> valeur courante
         self.choisir = choisir      # valeur -> None

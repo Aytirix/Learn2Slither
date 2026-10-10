@@ -12,18 +12,11 @@ from ..environment import board as bd
 from ..evaluation import Bilan
 from . import gfx, theme, widgets
 from .board_view import BoardView, cell_center
-from .model_card import couper
+from .model_card import AVERTISSEMENT, couper
 from .game import Game
 from .particles import ParticleSystem
 
 RETOUR_MENU = "menu"
-
-HINTS_PARTIE = (
-    "+ / -            vitesse",
-    "N / P            pas suivant  ·  mode pas a pas",
-    "V / T            vision  ·  trace terminal",
-    "ECHAP            arreter et voir les resultats",
-)
 
 HINTS_RESULTATS = (
     "GAUCHE / DROITE   coup precedent  ·  coup suivant",
@@ -53,21 +46,28 @@ class EvaluationGame(Game):
             self.bilan.numero if not self.termine else self.bilan.stats.games,
             etat)
 
-    @property
-    def hints(self):
-        return HINTS_PARTIE
+    # Aide clavier du panneau (voir panel_view.hints_for).
+    aide_complete = False
+    aide_sortie = "arreter et voir les resultats"
 
     @property
     def fin_hint(self):
         if self.termine:
             return "[ESPACE] voir les resultats"
+        if self.step_by_step:
+            return self.avec_revoir("[N] partie suivante")
         return "partie suivante..."
 
     @property
     def pause_fin(self):
-        # A grande vitesse, on n'attend pas plus d'une seconde entre deux
-        # parties : l'evaluation en enchaine beaucoup.
-        return max(0.3, min(1.2, 30.0 / self.speed))
+        # Partie qui atteint le seuil : on laisse le temps de la voir.
+        if self.termine:
+            return max(0.3, min(1.2, 30.0 / self.speed))
+        # Objectif rate : simple coup d'oeil, l'evaluation en enchaine
+        # beaucoup (0.4 s au plus) ; aucune attente a grande vitesse
+        # (40 et plus, MAX compris).
+        pause = min(0.4, 4.0 / self.speed)
+        return 0.0 if pause <= 0.1 else pause
 
     # -- deroulement --------------------------------------------------
     def _tick(self):
@@ -75,6 +75,11 @@ class EvaluationGame(Game):
         self.bilan.apres_pas(self.board)
         if not self.board.alive:
             self.termine = self.bilan.fin_partie(self.board)
+            # Grande vitesse et objectif rate : pas d'ecran de fin du
+            # tout, la partie suivante part au meme pas.
+            if (not self.termine and not self.step_by_step
+                    and self.pause_fin == 0.0):
+                self.next_session()
 
     def next_session(self):
         """Apres l'ecran de fin : partie suivante, ou fin de l'evaluation."""
@@ -114,13 +119,15 @@ class _Rejeu:
 class ResultsScreen:
     """Bilan de l'evaluation, avec rejeu de la partie retenue."""
 
-    def __init__(self, fonts, starfield, bilan, nom_modele, taille):
+    def __init__(self, fonts, starfield, bilan, nom_modele, taille,
+                 voit_tout=False):
         self.fonts = fonts
         self.starfield = starfield
         self.vignette = gfx.make_vignette(theme.WIN_W, theme.WIN_H)
         self.board_view = BoardView(fonts)
         self.bilan = bilan
         self.nom_modele = nom_modele
+        self.voit_tout = voit_tout
         self.numero, self.photos = bilan.a_rejouer()
         self.rejeu = _Rejeu(taille)
         self.index = max(0, len(self.photos) - 1)   # on part du present
@@ -168,6 +175,9 @@ class ResultsScreen:
         x, y = theme.PANEL_X, theme.BOARD_Y
         widgets.texte(screen, self.fonts["title"], "RESULTATS", (x, y),
                       theme.TEXT)
+        if self.voit_tout:
+            widgets.texte(screen, self.fonts["label"], AVERTISSEMENT,
+                          (x, y + 56), theme.RED_APPLE)
         widgets.texte(screen, self.fonts["sub"],
                       "EVALUATION  ·  {}  ·  AGENT FIGE".format(
                           self.nom_modele.upper()),

@@ -1,17 +1,28 @@
 """Etat d'une partie : tempo, effets visuels et trace terminal."""
 
 import random
+import time
+from collections import deque
 
 from .. import config as cfg
 from ..config import GameConfig
 from ..environment import board as bd
+from ..environment.plateau_complet import observer
 from ..environment.rewards import recompense
+from ..evaluation import Photo
 from . import gfx, theme
-from .board_view import cell_center
+from .board_view import FIN_HINT, cell_center
 from .particles import ParticleSystem
 
-MIN_SPEED = cfg.SPEEDS[0]
-MAX_SPEED = cfg.SPEEDS[-1]
+# Vitesse MAX : on enchaine les pas sans attente, mais pas plus de ce temps
+# de calcul par image, pour que la fenetre reste fluide (60 images / s, soit
+# environ 16 ms par image ; on en garde pour le dessin).
+BUDGET_MAX_S = 0.010
+
+# Pas que l'on peut revoir en arriere en mode pas a pas (fleche GAUCHE).
+HISTORIQUE_MAX = 1000
+
+FIN_HINT_SUIVANTE = "[N] partie suivante"
 
 
 class Game:
@@ -40,6 +51,11 @@ class Game:
         self.sessions = self.config.sessions
         self.death_timer = 0.0
         self.agent_en_partie = False
+        # Photos des derniers pas ; historique[-1] est toujours le present.
+        # `recul` = combien de pas en arriere on regarde (0 = le present).
+        self.historique = deque(maxlen=HISTORIQUE_MAX)
+        self.recul = 0
+        self._photographier()
         self._debut_partie_agent()
 
     @property
@@ -57,18 +73,38 @@ class Game:
         return "PILOTE IA"
 
     @property
+    def fin_hint(self):
+        """Texte de l'ecran de fin."""
+        if not self.step_by_step:
+            return FIN_HINT
+        texte = (FIN_HINT_SUIVANTE if self.session < self.sessions
+                 else FIN_HINT)
+        return self.avec_revoir(texte)
+
+    def avec_revoir(self, texte):
+        """Ajoute [GAUCHE] revoir quand la fleche sert a reculer."""
+        if self.step_by_step and not self.manual:
+            return texte + "  ·  [GAUCHE] revoir"
+        return texte
+
+    @property
     def pause_fin(self):
         """Secondes d'ecran de fin avant la session suivante."""
         return 1.2
 
     # -- geometrie ----------------------------------------------------
     @property
+    def vitesse_max(self):
+        return self.speed == cfg.VITESSE_MAX
+
+    @property
     def interval(self):
-        return 1.0 / self.speed
+        """Secondes entre deux pas ; 0 a la vitesse MAX."""
+        return 0.0 if self.vitesse_max else 1.0 / self.speed
 
     def progress(self):
         """Avancement 0->1 entre deux cases, adouci."""
-        if not self.board.alive:
+        if not self.board.alive or self.interval <= 0:
             return 1.0
         return gfx.ease_out_cubic(min(1.0, self.acc / self.interval))
 
@@ -105,12 +141,58 @@ class Game:
             self.pending.append(direction)
 
     def request_step(self):
-        """Autorise un pas supplementaire en mode pas a pas."""
+        """N : joue un pas, et passe en mode pas a pas s'il ne l'etait pas.
+
+        Hors mode pas a pas, N passait inapercu (le serpent avancait deja
+        tout seul) : appuyer sur N fige donc le jeu et avance d'un pas.
+        """
+        if not self.step_by_step:
+            self.toggle_step_mode()
         self.steps_left += 1
 
     def toggle_step_mode(self):
         self.step_by_step = not self.step_by_step
         self.steps_left = 0
+        if not self.step_by_step:
+            # On reprend le jeu la ou il en etait, pas dans le passe.
+            self.revenir_au_present()
+
+    # -- retour en arriere (mode pas a pas) ---------------------------
+    # On ne fait que MONTRER le passe : la partie, le hasard des pommes et
+    # ce que l'agent a appris ne sont jamais rejoues ni annules. Revenir en
+    # avant reaffiche les photos jusqu'au present ; c'est seulement depuis
+    # le present qu'un nouveau pas est vraiment joue.
+    def pas_suivant(self):
+        """N ou DROITE : avance dans l'historique, sinon joue un pas."""
+        if self.recul == 0:
+            self.request_step()
+            return
+        self.recul -= 1
+        self._montrer(self.historique[-1 - self.recul])
+
+    def pas_precedent(self):
+        """GAUCHE : montre le pas d'avant (en mode pas a pas seulement)."""
+        if not self.step_by_step:
+            return
+        if self.recul + 1 >= len(self.historique):
+            return
+        self.recul += 1
+        self.steps_left = 0
+        self._montrer(self.historique[-1 - self.recul])
+
+    def revenir_au_present(self):
+        if self.recul:
+            self.recul = 0
+            self._montrer(self.historique[-1])
+
+    def _montrer(self, photo):
+        """Affiche une photo, avec l'animation depuis ce qui etait montre."""
+        self.prev_snake = list(self.board.snake)
+        photo.restaurer(self.board)
+        self.acc = 0.0
+
+    def _photographier(self):
+        self.historique.append(Photo(self.board))
 
     def next_session(self):
         """Passe a la session suivante si le quota n'est pas atteint."""
@@ -123,8 +205,12 @@ class Game:
     def restart(self):
         """Nouvelle partie, effets remis a zero."""
         # Une partie abandonnee en cours (touche R) est quand meme apprise.
+        self.revenir_au_present()
         self._fin_partie_agent()
         self.board.reset()
+        self.recul = 0
+        self.historique.clear()
+        self._photographier()
         self.particles.clear()
         self.prev_snake = list(self.board.snake)
         self.pending.clear()
@@ -158,8 +244,9 @@ class Game:
         """A la fermeture : ne pas perdre la partie en cours."""
         self._fin_partie_agent()
 
-    def change_speed(self, factor):
-        self.speed = max(MIN_SPEED, min(MAX_SPEED, self.speed * factor))
+    def change_speed(self, delta):
+        """+ / - : cran suivant ou precedent de cfg.SPEEDS, comme au lobby."""
+        self.speed = cfg.valeur_voisine(cfg.SPEEDS, self.speed, delta)
 
     # -- simulation ---------------------------------------------------
     def update(self, dt):
@@ -168,14 +255,26 @@ class Game:
         self.particles.update(dt)
         self._update_shake(dt)
 
+        if self.recul:
+            # On regarde le passe : rien n'est joue, on finit l'animation.
+            self.acc = min(self.acc + dt, self.interval)
+            return
         if not self.board.alive:
-            self.death_timer += dt
-            if self.death_timer > self.pause_fin:
-                self.next_session()
+            self._apres_la_fin(dt)
             return
         if self.paused:
             return
         if self.step_by_step and self.steps_left <= 0:
+            # En attente du prochain N : on laisse quand meme l'animation
+            # du dernier pas aller a son terme. Sans cela, `acc` restait a 0
+            # juste apres le pas : la tete etait deja sur sa nouvelle case
+            # mais le corps, interpole, restait dessine a l'ancienne place
+            # jusqu'au N suivant.
+            self.acc = min(self.acc + dt, self.interval)
+            return
+
+        if self.vitesse_max:
+            self._avancer_au_maximum()
             return
 
         self.acc += dt
@@ -194,6 +293,32 @@ class Game:
         if self.board.alive and self.rng.random() < dt * 30:
             self.particles.trail(self.head_pixel(), theme.SNAKE_HEAD, 1)
 
+    def _apres_la_fin(self, dt):
+        """Ecran de fin, puis partie suivante.
+
+        En mode pas a pas, on attend N ou DROITE : on peut ainsi revoir
+        les derniers pas (GAUCHE) avant que la partie suivante ne parte.
+        """
+        if self.step_by_step:
+            if self.steps_left > 0:
+                self.steps_left = 0
+                self.next_session()
+            return
+        self.death_timer += dt
+        if self.death_timer > self.pause_fin:
+            self.next_session()
+
+    def _avancer_au_maximum(self):
+        """Vitesse MAX : autant de pas que le budget de l'image le permet."""
+        fin = time.perf_counter() + BUDGET_MAX_S
+        while self.board.alive and time.perf_counter() < fin:
+            if self.step_by_step:
+                if self.steps_left <= 0:
+                    break
+                self.steps_left -= 1
+            self._tick()
+        self.acc = 0.0
+
     def _update_shake(self, dt):
         self.shake_amp *= 0.86 ** (dt * 60)
         if self.shake_amp < 0.4:
@@ -205,11 +330,18 @@ class Game:
                 self.rng.uniform(-self.shake_amp, self.shake_amp),
             )
 
+    @property
+    def vision_complete(self):
+        """Vrai si l'agent pilote voit tout le plateau (hors sujet)."""
+        return self.agent_pilote and getattr(
+            self.agent, "vision_complete", False)
+
     def _tick(self):
-        vision = self.board.vision_chars()
+        vision = observer(self.board, self.vision_complete)
         direction = self._next_direction(vision)
         self.prev_snake = list(self.board.snake)
         event = self.board.step(direction)
+        self._photographier()
         self._apprendre(vision, direction, event)
         self._on_event(event, direction)
 
@@ -220,7 +352,8 @@ class Game:
         learn = getattr(self.agent, "learn", None)
         if learn is not None:
             # board.dead et non `not alive` : une troncature bootstrappe.
-            apres = vision if self.board.dead else self.board.vision_chars()
+            apres = (vision if self.board.dead
+                     else observer(self.board, self.vision_complete))
             learn(vision, direction, recompense(event), apres,
                   self.board.dead)
         if not self.board.alive:

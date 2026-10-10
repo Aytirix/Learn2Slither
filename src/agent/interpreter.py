@@ -110,3 +110,44 @@ def encode(vision, cap):
         rayon = vision[direction]
         etat.append(lire_rayon(rayon))
     return tuple(etat)
+
+
+# -- Option hors sujet : vision de tout le plateau ---------------------------
+#
+# Uniquement pour un modele cree avec VISION = PLATEAU (ecran ENTRAINEMENT).
+# L'environnement fournit une VueComplete (src/environment/plateau_complet.py)
+# en coordonnees absolues ; on la remet ici dans le repere du serpent.
+
+VISION_CROIX = "croix"
+VISION_PLATEAU = "plateau"
+VISIONS = (VISION_CROIX, VISION_PLATEAU)
+
+
+def _signe(n):
+    return (n > 0) - (n < 0)
+
+
+def encode_complet(vision, cap):
+    """Etat de la croix + (pieges, pomme), dans le repere du serpent.
+
+        pieges : (devant, gauche, droite), 1 si la case mene a un piege
+        pomme  : (signe devant, signe gauche) vers la pomme verte la plus
+                 proche ; (0, 0) s'il n'y en a pas
+
+        (('R', 2), ('G', 2), ('W', 3), (0, 1, 0), (1, -1))
+    """
+    pieges = getattr(vision, "pieges", None)
+    if pieges is None:
+        raise ValueError(
+            "ce modele voit tout le plateau : la boucle de jeu doit lui "
+            "donner une VueComplete (plateau_complet.observer)")
+    relatives = directions_relatives(cap)
+    gauche = relatives[1]
+    if vision.pomme is None:
+        pomme = (0, 0)
+    else:
+        dx, dy = vision.pomme
+        pomme = (_signe(dx * cap[0] + dy * cap[1]),
+                 _signe(dx * gauche[0] + dy * gauche[1]))
+    return encode(vision, cap) + (
+        tuple(int(pieges[d]) for d in relatives), pomme)

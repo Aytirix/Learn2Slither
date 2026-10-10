@@ -9,16 +9,17 @@ Chaque pas est photographie, pour pouvoir ensuite rejouer la partie coup
 par coup, en avant et en arriere.
 """
 
+from .config import OBJECTIF_DEFAUT
 from .session import SessionStats
 
-# Longueur visee : le palier de bonus le plus haut du sujet.
-SEUIL = 35
+# Longueur visee par defaut ; reglable dans l'ecran EVALUATION (OBJECTIF).
+SEUIL = OBJECTIF_DEFAUT
 
 
 class Photo:
     """Etat du plateau a un instant : de quoi le redessiner a l'identique."""
 
-    __slots__ = ("snake", "greens", "reds", "direction", "steps",
+    __slots__ = ("snake", "greens", "reds", "direction", "steps", "idle",
                  "max_length", "alive", "truncated", "end_cause", "event")
 
     def __init__(self, board):
@@ -27,6 +28,9 @@ class Photo:
         self.reds = list(board.reds)
         self.direction = board.direction
         self.steps = board.steps
+        # Pas depuis la derniere pomme : sans lui, revenir au present apres
+        # un retour en arriere (mode pas a pas) fausserait la troncature.
+        self.idle = board.idle
         self.max_length = board.max_length
         self.alive = board.alive
         self.truncated = board.truncated
@@ -40,6 +44,7 @@ class Photo:
         board.reds = list(self.reds)
         board.direction = self.direction
         board.steps = self.steps
+        board.idle = self.idle
         board.max_length = self.max_length
         board.alive = self.alive
         board.truncated = self.truncated

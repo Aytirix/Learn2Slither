@@ -11,7 +11,6 @@ from ..agent.modele import ErreurModele
 from ..config import GameConfig
 from ..environment import board as bd
 from .. import models
-from ..evaluation import SEUIL
 from . import theme
 from .evaluation_view import EvaluationGame, ResultsScreen
 from .evaluation_view import RETOUR_MENU as RESULTS_RETOUR
@@ -38,6 +37,8 @@ KEY_DIRECTIONS = {
     pygame.K_RIGHT: bd.RIGHT,
     pygame.K_d: bd.RIGHT,
 }
+
+FLECHES_PAS = (pygame.K_LEFT, pygame.K_RIGHT)
 
 SPEED_UP_KEYS = (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS)
 SPEED_DOWN_KEYS = (pygame.K_MINUS, pygame.K_KP_MINUS)
@@ -115,9 +116,9 @@ class Application:
         self.eval_config = GameConfig(learn=False, trace=False)
         self.eval_setup = Lobby(
             fonts, self.eval_config, self.starfield, avec_pilote=False,
-            sous_titre="EVALUATION  ·  PARTIES EN BOUCLE JUSQU'A UNE "
-                       "LONGUEUR DE {}".format(SEUIL),
-            bouton="EVALUER")
+            sous_titre="EVALUATION  ·  PARTIES EN BOUCLE JUSQU'A ATTEINDRE "
+                       "L'OBJECTIF",
+            bouton="EVALUER", avec_objectif=True)
         self.results = None
         self.eval_game = None
 
@@ -219,7 +220,8 @@ class Application:
                 "modele illisible : voir le terminal"
             return
         self.eval_setup.formulaire.message = ""
-        self.eval_game = EvaluationGame(self.eval_config, agent)
+        self.eval_game = EvaluationGame(self.eval_config, agent,
+                                        seuil=self.eval_config.objectif)
         self.state = SCREEN_EVAL
 
     def _event_eval(self, event):
@@ -234,7 +236,8 @@ class Application:
         self.results = ResultsScreen(
             self.fonts, self.starfield, self.eval_game.bilan,
             models.label_for(self.eval_config.model),
-            self.eval_config.size)
+            self.eval_config.size,
+            voit_tout=self.eval_game.vision_complete)
         self.eval_game = None
         self.state = SCREEN_RESULTS
 
@@ -386,7 +389,14 @@ def _game_event(key, game, running):
 
 def handle_key(game, key):
     """Applique une touche de jeu a la partie en cours."""
-    if key in KEY_DIRECTIONS:
+    if game.step_by_step and not game.manual and key in FLECHES_PAS:
+        # Pas a pas avec l'IA : les fleches ne dirigent rien, elles font
+        # reculer ou avancer d'un pas. Au clavier, elles dirigent toujours.
+        if key == pygame.K_LEFT:
+            game.pas_precedent()
+        else:
+            game.pas_suivant()
+    elif key in KEY_DIRECTIONS:
         game.queue_direction(KEY_DIRECTIONS[key])
     elif key == pygame.K_SPACE:
         if game.board.alive:
@@ -396,7 +406,7 @@ def handle_key(game, key):
     elif key == pygame.K_r:
         game.restart()
     elif key == pygame.K_n:
-        game.request_step()
+        game.pas_suivant()
     elif key == pygame.K_p:
         game.toggle_step_mode()
     elif key == pygame.K_v:
@@ -404,6 +414,6 @@ def handle_key(game, key):
     elif key == pygame.K_t:
         game.trace = not game.trace
     elif key in SPEED_UP_KEYS:
-        game.change_speed(1.25)
+        game.change_speed(1)
     elif key in SPEED_DOWN_KEYS:
-        game.change_speed(0.8)
+        game.change_speed(-1)
