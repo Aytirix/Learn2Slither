@@ -6,8 +6,6 @@
     -dontlearn          -> l'agent ci-dessus, fige : il joue sans apprendre
 """
 
-import sys
-
 from .. import baselines
 from . import modele
 from .agent import Agent
@@ -26,9 +24,6 @@ def creer_agent(config, rng=None):
         agent = modele.charger(config.model, rng=rng)
         print("Chargement du modele entraine depuis {} ({} parties)".format(
             config.model, agent.parties))
-        if agent.vision_complete:
-            print("Attention : ce modele voit TOUT le plateau, pas seulement"
-                  " sa croix (option hors sujet)", file=sys.stderr)
     else:
         agent = Agent(rng=rng)
 

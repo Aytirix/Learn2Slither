@@ -236,8 +236,7 @@ class Application:
         self.results = ResultsScreen(
             self.fonts, self.starfield, self.eval_game.bilan,
             models.label_for(self.eval_config.model),
-            self.eval_config.size,
-            voit_tout=self.eval_game.vision_complete)
+            self.eval_config.size)
         self.eval_game = None
         self.state = SCREEN_RESULTS
 

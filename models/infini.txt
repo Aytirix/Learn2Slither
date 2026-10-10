@@ -3,7 +3,6 @@
  "version_encodage": 1,
  "distance_max": 3,
  "regle": "qlearning",
- "vision": "croix",
  "hyperparametres": {
   "gamma": 0.95,
   "alpha": "1/n^0.7",

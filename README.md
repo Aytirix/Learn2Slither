@@ -83,22 +83,11 @@ Lancé sans argument, `./snake` ouvre le menu principal :
 | Entrée | Rôle |
 |---|---|
 | **JOUER** | le lobby : l'IA joue au mieux (agent **figé**, rien n'est sauvegardé), ou toi au clavier |
-| **ENTRAINEMENT** | liste des modèles et leur détail ; créer un modèle (nom, vision, γ, ε minimal, pas cible, valeur initiale, plateau, parties) ; continuer l'entraînement d'un modèle jusqu'à N parties |
+| **ENTRAINEMENT** | liste des modèles et leur détail ; créer un modèle (nom, γ, ε minimal, pas cible, valeur initiale, plateau, parties) ; continuer l'entraînement d'un modèle jusqu'à N parties |
 | **EVALUATION** | parties en boucle avec l'agent figé jusqu'à une partie de longueur ≥ OBJECTIF (réglable de 5 en 5, 35 par défaut), menée jusqu'à sa fin ; puis statistiques et rejeu coup par coup |
 | **QUITTER** | ferme le programme |
 
 `ÉCHAP` remonte d'un écran ; depuis le menu principal, il quitte.
-
-**Option VISION = PLATEAU (hors sujet).** À la création d'un modèle, on peut
-lui donner, en plus de sa croix, deux informations calculées sur **tout** le
-plateau : pour chaque coup, si la case mène à un piège (espace libre plus
-petit que le serpent), et de quel côté est la pomme verte la plus proche.
-Le sujet l'interdit (−42) : c'est une option de comparaison, jamais active
-par défaut, enregistrée dans le fichier du modèle (`"vision": "plateau"`).
-Partout où un tel modèle est utilisé (liste, fiche, lobby, partie,
-résultats, et `-load` en ligne de commande), un avertissement rouge
-« ATTENTION : VOIT TOUT LE PLATEAU (HORS SUJET) » s'affiche. Les modèles
-rendus dans `models/` voient tous seulement la croix.
 
 **Lobby (JOUER) et réglages de l'évaluation :**
 
@@ -159,7 +148,7 @@ Les options suivent le format du sujet (simple tiret, nom complet).
 | `-verbose` | garde la trace terminal même avec `-visual off` |
 | `-size N` | taille du plateau (bonus) |
 | `-speed F` | cases par seconde (`inf` = vitesse maximale) |
-| `-seed N` | graine aléatoire, pour des runs reproductibles |
+| `-seed N` | graine de départ : la partie n reçoit la graine N + n - 1 et se rejoue seule avec `-seed <sa graine>` (affichée dans le panneau) |
 | `-pilot ia\|joueur` | pilote présélectionné |
 | `-lobby on\|off` | force ou non le passage par le lobby |
 | `-baseline random` | agent de référence sans apprentissage, pour comparer |

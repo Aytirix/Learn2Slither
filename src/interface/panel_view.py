@@ -5,7 +5,6 @@ import pygame
 from .. import config as cfg
 from ..environment import board as bd
 from . import gfx, theme
-from .model_card import AVERTISSEMENT
 
 CHAR_COLORS = {
     bd.WALL_CHAR: theme.TEXT_MUTED,
@@ -93,6 +92,14 @@ def recadrer(lines, max_lignes, max_colonnes):
             for line in lines[haut:haut + max_lignes]], True
 
 
+def _libelle_record(game):
+    """RECORD, suivi de la graine de la partie record si on la connait."""
+    graine = getattr(game, "graine_record", None)
+    if graine is None:
+        return "RECORD"
+    return "RECORD  ·  GRAINE {}".format(graine)
+
+
 class PanelView:
     """Colonne de droite, dessinee directement sur l'ecran."""
 
@@ -122,17 +129,21 @@ class PanelView:
             caption, True, theme.ORANGE if recul else theme.ACCENT)
         self.screen.blit(title, (x, y))
         self.screen.blit(sub, (x, y + 38))
-        if getattr(game, "vision_complete", False):
-            # Modele hors sujet : rappele en permanence pendant la partie.
-            alerte = self.fonts["label"].render(AVERTISSEMENT, True,
-                                                theme.RED_APPLE)
-            self.screen.blit(alerte, (x, y + 56))
-        return y + 74
+        bas = y + 56
+        graine = getattr(game.board, "graine", None)
+        if graine is not None and getattr(game, "graine_rejouable", False):
+            # Pour rejouer cette partie a l'identique : -seed <graine>.
+            texte = self.fonts["label"].render(
+                "GRAINE {}  ·  -seed {} la rejoue".format(graine, graine),
+                True, theme.TEXT_MUTED)
+            self.screen.blit(texte, (x, bas))
+            bas += 18
+        return max(y + 74, bas)
 
     def _stats(self, game, x, y):
         stats = (
             ("LONGUEUR", str(len(game.board.snake))),
-            ("RECORD", str(game.best_length)),
+            (_libelle_record(game), str(game.best_length)),
             ("DUREE", str(game.board.steps)),
             ("VITESSE", cfg.libelle_vitesse(game.speed).replace(" ", "")),
         )

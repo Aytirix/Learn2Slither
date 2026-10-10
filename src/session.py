@@ -17,8 +17,8 @@ import random
 import statistics
 from collections import Counter
 
+from . import graine as gr
 from .environment import board as bd
-from .environment.plateau_complet import observer
 
 # Plafond de securite de la boucle de jeu. `Board` tronque deja les parties
 # qui tournent en rond ; ce garde-fou-la protege contre un bug qui laisserait
@@ -103,18 +103,15 @@ def play_session(board, agent=None, reward_fn=None, trace=False):
         # quel sens celui-ci part (IA.md section 6.6).
         debut(board.direction)
 
-    # Un modele "plateau" (hors sujet) recoit aussi tout le plateau ; tous
-    # les autres agents, la croix seule.
-    complete = getattr(agent, "vision_complete", False)
     while board.alive and board.steps < MAX_STEPS_PER_SESSION:
-        vision = observer(board, complete)
+        vision = board.vision_chars()
         action = agent.choose(vision) if agent else board.direction
         event = board.step(action)
 
         if agent is not None and reward_fn is not None:
             learn = getattr(agent, "learn", None)
             if learn is not None:
-                after = vision if board.dead else observer(board, complete)
+                after = vision if board.dead else board.vision_chars()
                 learn(vision, action, reward_fn(event), after, board.dead)
 
         if trace:
@@ -137,13 +134,16 @@ def play_session(board, agent=None, reward_fn=None, trace=False):
 
 def run_sessions(config, agent=None, reward_fn=None):
     """Enchaine config.sessions parties sans ouvrir de fenetre."""
-    rng = random.Random(config.seed)
-    board = bd.Board(size=config.size, rng=rng)
+    board = bd.Board(size=config.size, rng=random.Random())
     stats = SessionStats()
+    # Une graine par partie (src/graine.py) : la partie n se rejoue seule
+    # avec -seed <graine de depart + n - 1>.
+    depart = gr.graine_de_depart(config.seed)
+    print("Graine de depart : {} (partie n : graine {} + n - 1)".format(
+        depart, depart))
 
     for index in range(config.sessions):
-        if index:
-            board.reset()
+        gr.nouvelle_partie(board, agent, gr.graine_partie(depart, index + 1))
         try:
             play_session(board, agent, reward_fn, trace=config.trace)
         except KeyboardInterrupt:

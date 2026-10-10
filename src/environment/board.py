@@ -88,8 +88,15 @@ class Board:
         self.reset()
 
     # -- cycle de vie -------------------------------------------------
-    def reset(self):
-        """Replace serpent et pommes, remet les compteurs a zero."""
+    def reset(self, graine=None):
+        """Replace serpent et pommes, remet les compteurs a zero.
+
+        Avec `graine`, le generateur est d'abord reseme : la partie ne
+        depend alors que de cette graine (voir src/graine.py).
+        """
+        if graine is not None:
+            self.rng.seed(graine)
+        self.graine = graine
         self.snake = self._spawn_snake()
         self.greens = []
         self.reds = []

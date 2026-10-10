@@ -20,7 +20,8 @@ class Photo:
     """Etat du plateau a un instant : de quoi le redessiner a l'identique."""
 
     __slots__ = ("snake", "greens", "reds", "direction", "steps", "idle",
-                 "max_length", "alive", "truncated", "end_cause", "event")
+                 "max_length", "alive", "truncated", "end_cause", "event",
+                 "graine")
 
     def __init__(self, board):
         self.snake = list(board.snake)
@@ -36,6 +37,8 @@ class Photo:
         self.truncated = board.truncated
         self.end_cause = board.end_cause
         self.event = board.last_event
+        # Graine de la partie : -seed <graine> la rejoue (src/graine.py).
+        self.graine = board.graine
 
     def restaurer(self, board):
         """Remet `board` dans l'etat photographie (pour l'affichage)."""
@@ -50,6 +53,7 @@ class Photo:
         board.truncated = self.truncated
         board.end_cause = self.end_cause
         board.last_event = self.event
+        board.graine = self.graine
 
 
 class Bilan:

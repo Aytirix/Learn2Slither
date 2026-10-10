@@ -12,7 +12,7 @@ from ..environment import board as bd
 from ..evaluation import Bilan
 from . import gfx, theme, widgets
 from .board_view import BoardView, cell_center
-from .model_card import AVERTISSEMENT, couper
+from .model_card import couper
 from .game import Game
 from .particles import ParticleSystem
 
@@ -119,15 +119,13 @@ class _Rejeu:
 class ResultsScreen:
     """Bilan de l'evaluation, avec rejeu de la partie retenue."""
 
-    def __init__(self, fonts, starfield, bilan, nom_modele, taille,
-                 voit_tout=False):
+    def __init__(self, fonts, starfield, bilan, nom_modele, taille):
         self.fonts = fonts
         self.starfield = starfield
         self.vignette = gfx.make_vignette(theme.WIN_W, theme.WIN_H)
         self.board_view = BoardView(fonts)
         self.bilan = bilan
         self.nom_modele = nom_modele
-        self.voit_tout = voit_tout
         self.numero, self.photos = bilan.a_rejouer()
         self.rejeu = _Rejeu(taille)
         self.index = max(0, len(self.photos) - 1)   # on part du present
@@ -175,9 +173,6 @@ class ResultsScreen:
         x, y = theme.PANEL_X, theme.BOARD_Y
         widgets.texte(screen, self.fonts["title"], "RESULTATS", (x, y),
                       theme.TEXT)
-        if self.voit_tout:
-            widgets.texte(screen, self.fonts["label"], AVERTISSEMENT,
-                          (x, y + 56), theme.RED_APPLE)
         widgets.texte(screen, self.fonts["sub"],
                       "EVALUATION  ·  {}  ·  AGENT FIGE".format(
                           self.nom_modele.upper()),
@@ -205,7 +200,7 @@ class ResultsScreen:
              theme.TEXT),
             ("LONGUEUR MEDIANE", "{:g}".format(stats.median_length),
              theme.TEXT),
-            ("LONGUEUR MAXIMALE", str(stats.max_length), theme.TEXT),
+            ("LONGUEUR MAXIMALE", self._record(), theme.TEXT),
             ("DUREE MOYENNE", "{:.0f} pas".format(duree), theme.TEXT),
         )
         hauteur = 20 + 25 * len(lignes) + 44
@@ -225,11 +220,24 @@ class ResultsScreen:
             y += 18
         return carte.bottom + 12
 
+    def _record(self):
+        """Longueur record, avec la graine qui rejoue cette partie."""
+        valeur = str(self.bilan.stats.max_length)
+        graine = (self.bilan.meilleure[0].graine if self.bilan.meilleure
+                  else None)
+        if graine is not None:
+            valeur += "  (graine {})".format(graine)
+        return valeur
+
     def _rejeu(self, screen, x, y):
         carte = pygame.Rect(x, y, theme.PANEL_W, 150)
         gfx.card(screen, carte, theme.BG_CARD, theme.BORDER, 14)
-        widgets.texte(screen, self.fonts["label"],
-                      "REJEU  ·  PARTIE {}".format(self.numero),
+        titre = "REJEU  ·  PARTIE {}".format(self.numero)
+        graine = self.photos[0].graine if self.photos else None
+        if graine is not None:
+            # -seed <graine> rejoue cette partie a l'identique.
+            titre += "  ·  GRAINE {}".format(graine)
+        widgets.texte(screen, self.fonts["label"], titre,
                       (x + 16, y + 14), theme.ACCENT)
         if not self.photos:
             widgets.texte(screen, self.fonts["mono"], "aucune partie jouee",

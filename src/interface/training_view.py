@@ -15,13 +15,11 @@ import pygame
 from .. import config as cfg
 from .. import models
 from ..agent import agent as ag
-from ..agent import interpreter as it
 from ..agent import modele
 from ..agent import qtable as qt
 from ..training import Entrainement
 from . import gfx, theme, widgets
-from .model_card import (ListeModeles, avertir, carte_details, entier,
-                         parties)
+from .model_card import ListeModeles, carte_details, entier, parties
 
 LISTE = "liste"
 NOUVEAU = "nouveau"
@@ -86,12 +84,6 @@ def aide_epsilon_min(epsilon):
     return "{:g} = 1 coup sur {:.0f} au hasard".format(epsilon, 1 / epsilon)
 
 
-def aide_vision(vision):
-    if vision == it.VISION_PLATEAU:
-        return "HORS SUJET : recoit aussi tout le plateau"
-    return "conforme au sujet : les 4 rayons seulement"
-
-
 class Choix:
     """Index dans une liste de valeurs, borne aux extremites."""
 
@@ -147,14 +139,8 @@ class TrainingScreen:
                                      qt.VALEUR_INITIALE)
         self.taille = Choix(cfg.TAILLES, 10)
         self.ajout = Choix(AJOUTS, AJOUT_DEFAUT)
-        self.vision = it.VISION_CROIX
         champs = [
             self.nom,
-            widgets.Pilules(
-                "VISION",
-                [(it.VISION_CROIX, "CROIX"), (it.VISION_PLATEAU, "PLATEAU")],
-                lambda: self.vision, self._choisir_vision,
-                aide=lambda: aide_vision(self.vision)),
             widgets.Reglage("GAMMA",
                             lambda: "{:g}".format(self.gamma.valeur),
                             self.gamma.changer,
@@ -178,7 +164,7 @@ class TrainingScreen:
         ]
         self.formulaire = widgets.Formulaire(
             self.fonts, champs, "CREER ET ENTRAINER", y=125,
-            hauteur_ligne=46)
+            hauteur_ligne=52)
         self.vue = NOUVEAU
 
     def _ouvrir_continuer(self):
@@ -211,9 +197,6 @@ class TrainingScreen:
             self.fonts, champs, "ENTRAINER", y=230)
         self.vue = CONTINUER
 
-    def _choisir_vision(self, vision):
-        self.vision = vision
-
     def _champ_taille(self):
         return widgets.Reglage(
             "PLATEAU D'ENTRAINEMENT",
@@ -235,8 +218,7 @@ class TrainingScreen:
             rng=random.Random(), gamma=self.gamma.valeur,
             epsilon_min=self.epsilon_min.valeur,
             pas_cible=self.pas_cible.valeur,
-            qtable=qt.QTable(valeur_initiale=self.valeur_initiale.valeur),
-            vision=self.vision)
+            qtable=qt.QTable(valeur_initiale=self.valeur_initiale.valeur))
         self._lancer(agent, models.chemin_nouveau(nom))
 
     def _lancer_continuer(self):
@@ -380,8 +362,6 @@ class TrainingScreen:
                 "{}  ·  DEJA {}  ·  GAMMA {:g}  ·  PAS CIBLE {}"
                 .format(infos.nom.upper(), parties(infos.parties).upper(),
                         infos.gamma, entier(infos.pas_cible)), y=60)
-            if infos.voit_tout:
-                avertir(screen, self.fonts, 190)
         self.formulaire.render(screen, self.time_s)
         widgets.aide(screen, self.fonts["label"], HINTS_FORMULAIRE,
                      self.formulaire.bas + 40)
@@ -392,8 +372,6 @@ class TrainingScreen:
         widgets.titre(screen, self.fonts, "ENTRAINEMENT",
                       "{}  ·  PLATEAU {} x {}".format(
                           nom, run.board.size, run.board.size), y=10)
-        if run.agent.vision_complete:
-            avertir(screen, self.fonts, 118)
         carte = pygame.Rect(140, 140, theme.WIN_W - 280, 440)
         gfx.card(screen, carte, theme.BG_CARD, theme.BORDER, 18)
         x, y = carte.x + 30, carte.y + 26

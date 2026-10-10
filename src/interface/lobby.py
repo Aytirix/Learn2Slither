@@ -5,7 +5,7 @@ import pygame
 from .. import config as cfg
 from .. import models
 from . import widgets
-from .model_card import avertir, parties
+from .model_card import parties
 from .widgets import QUIT, START  # noqa: F401  (reexportes pour loop.py)
 
 PILOT_LABELS = {cfg.PILOT_AI: "IA", cfg.PILOT_HUMAN: "JOUEUR"}
@@ -106,8 +106,6 @@ class Lobby:
         self.fond.render(screen, self.time_s)
         widgets.titre(screen, self.fonts, "LEARN2SLITHER", self.sous_titre,
                       y=70)
-        if self.config.ai_driven and models.voit_tout(self.config.model):
-            avertir(screen, self.fonts, 192)
         self.formulaire.render(screen, self.time_s)
         widgets.aide(screen, self.fonts["label"], HINTS,
                      self.formulaire.bas + 26)

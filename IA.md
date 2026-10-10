@@ -793,15 +793,6 @@ Le réseau apprend aussi vite et plus régulièrement, mais **ne dépasse pas** 
 
 Tout converge vers **environ 29,5**. Savoir qu'il est long, qu'il s'enroule, ou revivre ses fins de partie ne suffit pas : pour éviter de s'enfermer, il faudrait voir la **forme** de son corps, et la croix ne la montre pas.
 
-**La contre-épreuve : lui montrer le plateau (option hors sujet).** Pour vérifier que la limite vient bien de la vision, une option `VISION = PLATEAU` (écran ENTRAINEMENT, jamais active par défaut, signalée en rouge partout où le modèle sert) donne au serpent, en plus de sa croix, deux faits calculés par l'environnement sur **tout** le plateau : pour chaque coup, si la case mène à un piège (moins de cases libres atteignables que sa longueur), et de quel côté est la pomme verte la plus proche. Même table Q, mêmes réglages, évaluation figée sur 200 parties, 4 graines :
-
-| | 3 000 parties | 20 000 parties | morts contre son corps |
-|---|---|---|---|
-| croix (le sujet) | 26,5 | 27,6 | ~100 % |
-| **plateau (hors sujet)** | 28,3 | **38,9** | 86 à 94 % |
-
-Avec la seule information « cette case est un piège », le plafond saute de **11 points**, à toutes les graines. C'est la preuve expérimentale de tout ce qui précède : l'algorithme n'était pas en cause, il lui manquait de voir où il s'enferme. Cette option est **hors sujet** (−42) : aucun modèle rendu dans `models/` ne l'utilise.
-
 **À retenir pour la soutenance :** treize idées testées et mesurées, de la plus simple (régler γ) à la plus ambitieuse (lui donner sa longueur et sa tendance à s'enrouler, et lui faire revivre ses fins de partie). Aucune ne franchit le plafond de 29,5, et toutes l'expliquent de la même façon : la limite vient de ce que le serpent voit, pas de la façon dont il apprend. Pour aller plus loin, il faudrait lui montrer la forme de son corps, ce que la règle de vision du sujet interdit.
 
 ---

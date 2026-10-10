@@ -697,7 +697,7 @@ class TestApplication(DossierModeles):
         touche(self.app, pygame.K_n)
         self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
                                                  text="neuf"))
-        touche(self.app, pygame.K_DOWN, 7)          # PARTIES A JOUER
+        touche(self.app, pygame.K_DOWN, 6)          # PARTIES A JOUER
         touche(self.app, pygame.K_LEFT, 10)         # au minimum : 10
         touche(self.app, pygame.K_RETURN)
         self.assertEqual(self.app.training.vue, "en_cours")
@@ -716,7 +716,7 @@ class TestApplication(DossierModeles):
         touche(self.app, pygame.K_n)
         self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
                                                  text="regle"))
-        touche(self.app, pygame.K_DOWN, 2)          # GAMMA
+        touche(self.app, pygame.K_DOWN)             # GAMMA
         touche(self.app, pygame.K_LEFT, 30)
         touche(self.app, pygame.K_DOWN)             # EPSILON MINIMAL
         touche(self.app, pygame.K_RIGHT, 30)
@@ -735,42 +735,6 @@ class TestApplication(DossierModeles):
                           agent.q.valeur_initiale), (0.0, 1.0, 0.0))
         self.assertEqual(models.infos("models/regle.txt").valeur_initiale,
                          0.0)
-
-    def test_creer_un_modele_qui_voit_tout(self):
-        touche(self.app, pygame.K_DOWN)
-        touche(self.app, pygame.K_RETURN)
-        touche(self.app, pygame.K_n)
-        self.app.handle_event(pygame.event.Event(pygame.TEXTINPUT,
-                                                 text="tout"))
-        touche(self.app, pygame.K_DOWN)             # VISION
-        touche(self.app, pygame.K_RIGHT)            # PLATEAU
-        self.assertEqual(self.app.training.vision, "plateau")
-        touche(self.app, pygame.K_DOWN, 6)          # PARTIES A JOUER
-        touche(self.app, pygame.K_LEFT, 10)
-        self.image()
-        touche(self.app, pygame.K_RETURN)
-        for _ in range(500):
-            self.image()
-            if self.app.training.vue != "en_cours":
-                break
-        self.assertTrue(modele.charger("models/tout.txt").vision_complete)
-        self.assertTrue(models.voit_tout("models/tout.txt"))
-        # Evaluation avec ce modele : averti jusque dans les resultats.
-        self.app.state = loop.SCREEN_MENU
-        self.app.menu.index = 0                     # focus sur JOUER
-        touche(self.app, pygame.K_DOWN, 2)
-        touche(self.app, pygame.K_RETURN)
-        self.app.eval_config.model = "models/tout.txt"
-        self.image()
-        touche(self.app, pygame.K_DOWN)
-        with silence():
-            touche(self.app, pygame.K_RETURN)
-        self.assertTrue(self.app.eval_game.vision_complete)
-        self.image(3)
-        with silence():
-            touche(self.app, pygame.K_ESCAPE)
-        self.assertTrue(self.app.results.voit_tout)
-        self.image()
 
     def test_nom_deja_pris_refuse(self):
         touche(self.app, pygame.K_DOWN)

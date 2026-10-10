@@ -11,6 +11,7 @@ import statistics
 import time
 from collections import deque
 
+from . import graine as gr
 from .agent import modele
 from .environment import board as bd
 from .environment.rewards import recompense
@@ -31,7 +32,10 @@ class Entrainement:
         self.chemin = chemin
         self.depart = agent.parties
         self.objectif = max(objectif, self.depart)
-        self.board = bd.Board(size=taille, rng=random.Random(seed))
+        self.board = bd.Board(size=taille, rng=random.Random())
+        # Une graine par partie (src/graine.py) : avec la meme graine de
+        # depart, tout l'entrainement se rejoue a l'identique.
+        self.graine_depart = gr.graine_de_depart(seed)
         self.horloge = horloge
         self.jouees = 0
         self.recentes = deque(maxlen=FENETRE_MOYENNE)
@@ -72,8 +76,8 @@ class Entrainement:
         """
         fin = self.horloge() + budget_s
         while not self.fini and self.jouees < self.a_jouer:
-            if self.jouees:
-                self.board.reset()
+            gr.nouvelle_partie(self.board, self.agent, gr.graine_partie(
+                self.graine_depart, self.jouees + 1))
             play_session(self.board, self.agent, recompense)
             self.jouees += 1
             self.recentes.append(self.board.max_length)

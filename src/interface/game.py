@@ -5,9 +5,9 @@ import time
 from collections import deque
 
 from .. import config as cfg
+from .. import graine as gr
 from ..config import GameConfig
 from ..environment import board as bd
-from ..environment.plateau_complet import observer
 from ..environment.rewards import recompense
 from ..evaluation import Photo
 from . import gfx, theme
@@ -31,8 +31,15 @@ class Game:
     def __init__(self, configuration=None, agent=None):
         self.config = configuration or GameConfig()
         self.agent = agent
-        self.rng = random.Random(self.config.seed)
-        self.board = bd.Board(size=self.config.size, rng=self.rng)
+        # Generateur des effets (particules, secousse) seulement : il tire
+        # au rythme des images, il ne doit pas deplacer les pommes.
+        self.rng = random.Random()
+        self.board = bd.Board(size=self.config.size, rng=random.Random())
+        # Une graine par partie (src/graine.py) : chaque partie se rejoue
+        # seule avec -seed <graine affichee dans le panneau>.
+        self.graine_depart = gr.graine_de_depart(self.config.seed)
+        self.numero_partie = 1
+        gr.nouvelle_partie(self.board, self.agent, self.graine)
         self.particles = ParticleSystem(self.rng)
         self.speed = self.config.speed
         self.paused = False
@@ -42,6 +49,9 @@ class Game:
         self.shake = (0, 0)
         self.shake_amp = 0.0
         self.best_length = len(self.board.snake)
+        # Graine de la partie qui detient le record : -seed <graine> la
+        # rejoue (src/graine.py). None si cette partie n'est pas rejouable.
+        self.graine_record = self.graine if self.graine_rejouable else None
         self.prev_snake = list(self.board.snake)
         self.acc = 0.0
         self.pending = []
@@ -91,6 +101,22 @@ class Game:
     def pause_fin(self):
         """Secondes d'ecran de fin avant la session suivante."""
         return 1.2
+
+    @property
+    def graine(self):
+        """Graine de la partie en cours : -seed <graine> la rejoue."""
+        return gr.graine_partie(self.graine_depart, self.numero_partie)
+
+    @property
+    def graine_rejouable(self):
+        """Vrai si -seed <graine> rejoue vraiment la partie.
+
+        Il faut un agent qui n'apprend pas : un agent qui apprend change
+        de table Q d'une partie a l'autre, et au clavier les coups viennent
+        du joueur. Dans ces deux cas, la graine n'est pas affichee.
+        """
+        return self.agent_pilote and not getattr(self.agent, "apprend",
+                                                 False)
 
     # -- geometrie ----------------------------------------------------
     @property
@@ -207,7 +233,8 @@ class Game:
         # Une partie abandonnee en cours (touche R) est quand meme apprise.
         self.revenir_au_present()
         self._fin_partie_agent()
-        self.board.reset()
+        self.numero_partie += 1
+        gr.nouvelle_partie(self.board, self.agent, self.graine)
         self.recul = 0
         self.historique.clear()
         self._photographier()
@@ -330,14 +357,8 @@ class Game:
                 self.rng.uniform(-self.shake_amp, self.shake_amp),
             )
 
-    @property
-    def vision_complete(self):
-        """Vrai si l'agent pilote voit tout le plateau (hors sujet)."""
-        return self.agent_pilote and getattr(
-            self.agent, "vision_complete", False)
-
     def _tick(self):
-        vision = observer(self.board, self.vision_complete)
+        vision = self.board.vision_chars()
         direction = self._next_direction(vision)
         self.prev_snake = list(self.board.snake)
         event = self.board.step(direction)
@@ -353,7 +374,7 @@ class Game:
         if learn is not None:
             # board.dead et non `not alive` : une troncature bootstrappe.
             apres = (vision if self.board.dead
-                     else observer(self.board, self.vision_complete))
+                     else self.board.vision_chars())
             learn(vision, direction, recompense(event), apres,
                   self.board.dead)
         if not self.board.alive:
@@ -384,7 +405,10 @@ class Game:
             self.particles.burst(head, theme.SNAKE_HEAD, 40, 240, 4.0, 0.7)
             self.shake_amp = 16.0
 
-        self.best_length = max(self.best_length, self.board.max_length)
+        if self.board.max_length > self.best_length:
+            self.best_length = self.board.max_length
+            self.graine_record = (self.board.graine if self.graine_rejouable
+                                  else None)
         if self.trace:
             self._print_state(direction, event)
         if self.board.end_cause is not None:

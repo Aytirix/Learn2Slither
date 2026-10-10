@@ -292,7 +292,6 @@ Lancé sans argument, `./snake` ouvre un **menu principal** (les 3 commandes du 
 
 - **JOUER** : le lobby. En mode IA, l'agent est **figé** (`figer()`, ε = 0) : il joue au mieux, n'apprend rien et ne modifie aucun fichier. Le bouton CHOISIR ouvre la liste des modèles avec le détail de chacun (parties, pas, situations connues, γ, ε…), validée par OK. Par défaut, c'est le modèle le plus entraîné. Plateau de 5 en 5 jusqu'à 50×50 (partout : jouer, entraînement, évaluation), vitesse par crans 1, 5, 10, 15, 20, 30, 40, 50, 75, 100 cases/s puis MAX (autant de pas que possible, avec un budget de 10 ms de calcul par image). Entraînement jusqu'à 10 millions de parties (de million en million après le premier). L'aide clavier de la partie a une ligne par touche ; P, V et T s'affichent en vert si actifs, en orange sinon.
 - **ENTRAINEMENT** : la liste des modèles et leur détail ; créer un modèle (nom, γ, ε minimal, `PAS_CIBLE`, plateau, nombre de parties) ou continuer un modèle existant « de X jusqu'à Y parties ». `src/training.py` joue les parties **par tranches** de 25 ms entre deux images, avec la même `play_session` que `-visual off` : la fenêtre reste fluide sans thread. Arrêter, fermer ou Ctrl+C sauvegarde ce qui est déjà joué.
-- **Option VISION = PLATEAU (hors sujet)** : à la création d'un modèle, on peut lui faire recevoir, en plus de la croix, deux faits calculés sur tout le plateau par `src/environment/plateau_complet.py` : pour chaque direction, si la case mène à un piège (remplissage depuis cette case : moins de cases libres que sa longueur), et l'écart vers la pomme verte la plus proche. L'interpréteur les remet dans le repère du serpent (`encode_complet`) ; la clé de la table devient par exemple `R2|G2|W3|P010|A+-`. Le fichier du modèle enregistre `"vision": "plateau"`, et un avertissement rouge s'affiche partout où ce modèle sert (et dans le terminal avec `-load`).
 - **EVALUATION** : l'agent figé enchaîne les parties jusqu'à ce qu'une partie atteigne la longueur OBJECTIF, réglable de 5 en 5 dans l'écran (35 par défaut, le bonus le plus haut du sujet). Cette partie n'est pas coupée : elle va jusqu'à sa fin, puis on affiche les statistiques de toutes les parties. `src/evaluation.py` photographie chaque pas : sur l'écran des résultats, ← et → rejouent la partie coup par coup.
 
 ---
@@ -359,11 +358,8 @@ Tout est détaillé avec les chiffres dans `IA.md` §6.8. En résumé :
 | bonus pour l'espace libre visible | aucun effet |
 | Double Q-learning (deux tables pour corriger la surestimation) | moins bien : 23,9 contre 28,3 à 3 000 parties, 25,9 contre 27,6 à 20 000 |
 | réseau de neurones (DQN) qui lit toute la croix | aussi bien, pas mieux : 28,3 à 3 000 parties, 27 à 28 à 20 000 ; il meurt même contre les murs |
-| *contre-épreuve hors sujet : lui dire si une case est un piège et où est la pomme, calculé sur tout le plateau* | ***38,9** contre 27,6 à 20 000 parties : le plafond saute, ce qui prouve que la limite est la vision* |
 
 **Conclusion :** tout converge vers environ 29,5. La limite vient de ce que le serpent voit, pas de la façon dont il apprend. Pour aller plus loin, il faudrait lui montrer la forme de son corps, ce que la règle de vision interdit.
-
-**La contre-épreuve (hors sujet) :** une option `VISION = PLATEAU`, choisie à la création d'un modèle, lui donne en plus deux faits calculés sur tout le plateau : pour chaque coup, si la case mène à un piège, et de quel côté est la pomme. Avec la même table Q, il passe de 27,6 à **38,9** à 20 000 parties. C'est la preuve que la limite vient de ce qu'il voit. L'option est signalée en rouge partout où un tel modèle sert, et aucun modèle rendu ne l'utilise.
 
 ---
 
