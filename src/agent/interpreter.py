@@ -1,26 +1,26 @@
-"""Interpreteur : transforme la vision brute du serpent en etat compact.
+"""Interpreteur : transforme la vision du serpent en un etat compact.
 
-La vision brute est un dictionnaire de 4 chaines, une par direction :
+La vision recue est un dictionnaire de 4 chaines, une par direction :
 
     {UP: "0GW", LEFT: "SSW", DOWN: "00W", RIGHT: "0RW"}
 
-Beaucoup trop d'etats possibles pour une table Q (IA.md section 6.2). On
-compresse donc chaque rayon en deux informations seulement : la premiere
-chose vue, et a quelle distance (IA.md section 6.4).
+Telle quelle, elle donne beaucoup trop d'etats differents pour une table Q.
+Chaque rayon est donc resume en deux informations : la premiere chose vue,
+et a quelle distance.
 """
 
 from ..environment import board as bd
 
 VIDE = bd.EMPTY_CHAR
 
-# Au-dela de cette distance, on ne distingue plus : "3" veut dire "3 ou plus".
-# C'est le curseur de richesse de l'etat (IA.md section 6.5).
+# Au-dela de cette distance on ne fait plus la difference : "3" veut dire
+# "3 ou plus". Plus la valeur est grande, plus il y a d'etats a apprendre.
 DISTANCE_MAX = 3
 
-# A incrementer a CHAQUE changement de la facon d'encoder un etat. Un modele
-# sauvegarde avec un autre encodage serait silencieusement faux : ses cles ne
-# correspondraient plus aux etats calcules. modele.py refuse donc de le
-# charger (IA.md section 11.5).
+# A changer des que la facon d'encoder un etat change. Un ancien modele
+# aurait des cles qui ne correspondent plus aux etats calcules, et il
+# jouerait n'importe comment sans erreur : modele.py refuse donc de le
+# charger.
 VERSION_ENCODAGE = 1
 
 
@@ -42,12 +42,10 @@ def lire_rayon(rayon):
     raise ValueError("rayon ne contient que du vide")
 
 
-# -- Etape 3 : le repere egocentrique ----------------------------------------
+# -- repere du serpent -------------------------------------------------------
 #
-# L'agent ne raisonne pas en HAUT / BAS / GAUCHE / DROITE, mais par rapport a
-# la direction ou il va (son "cap") : tout droit, tourner a gauche, tourner a
-# droite. Le demi-tour n'existe pas : des 3 cases de long, il tue
-# immediatement contre le cou (a 2 cases ou moins il est legal, mais rare).
+# L'agent ne pense pas en HAUT / BAS / GAUCHE / DROITE, mais par rapport a la
+# direction ou il va (son "cap") : tout droit, a gauche ou a droite.
 
 TOUT_DROIT = 0
 GAUCHE = 1
@@ -91,7 +89,7 @@ def directions_relatives(cap):
     return (cap, tourner(cap, GAUCHE), tourner(cap, DROITE))
 
 
-# -- Etape 4 : l'etat complet ------------------------------------------------
+# -- l'etat complet ----------------------------------------------------------
 
 
 def encode(vision, cap):

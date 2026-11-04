@@ -7,14 +7,15 @@ cette situation, a quel point cette action est-elle bonne ?"
                                         tout   gauche droite
                                         droit
 
-La table retient aussi, pour chaque couple (etat, action), combien de fois
-il a ete appris : c'est ce compteur qui regle la force des corrections
-(etape 8, IA.md section 8.1).
+La table compte aussi, pour chaque couple (etat, action), le nombre de mises
+a jour deja faites : c'est ce compteur qui fixe alpha (voir Agent.alpha).
 """
 
 from .interpreter import ACTIONS
 
-# Valeur donnee aux actions d'un etat jamais vu (IA.md section 8.4).
+# Valeur de depart des actions d'un etat jamais vu. Un peu au-dessus de ce
+# que rapporte un pas (-1), pour que les actions pas encore essayees soient
+# tentees en premier.
 VALEUR_INITIALE = 1.0
 
 
@@ -42,26 +43,26 @@ class QTable:
         Un etat jamais vu est cree a la volee, avec `valeur_initiale` pour
         chacune des actions. Un etat deja connu est renvoye tel quel.
 
-        Renvoie la liste STOCKEE dans la table, pas une copie : modifier la
-        liste renvoyee modifie la table. C'est ce que fera l'apprentissage.
+        Renvoie la liste qui est dans la table, pas une copie : la modifier
+        modifie la table, et c'est justement ce que fait l'apprentissage.
         """
-        # Seul un etat inconnu recoit une liste neuve : un etat connu garde
-        # ce qu'il a appris (piege 1), et chaque etat a SA propre liste,
-        # fabriquee ici, au moment ou il apparait (piege 2).
+        # On ne cree une liste que pour un etat inconnu, sinon on effacerait
+        # ce qu'il a appris. Et chaque etat a bien sa propre liste, creee
+        # ici : deux etats ne doivent jamais partager la meme.
         if etat not in self.table:
             self.table[etat] = [self.valeur_initiale] * len(ACTIONS)
         return self.table[etat]
 
     def lire(self, etat):
-        """Les valeurs des actions dans `etat`, en LECTURE SEULE.
+        """Les valeurs des actions dans `etat`, sans rien modifier.
 
-        Contrairement a valeurs(), un etat inconnu n'est pas cree : on
-        renvoie seulement ce qu'il vaudrait, sans l'ajouter a la table. Et
-        on renvoie une copie : la modifier ne change rien.
+        Contrairement a valeurs(), un etat inconnu n'est pas ajoute : on
+        renvoie juste ce qu'il vaudrait. Et c'est une copie, la modifier ne
+        change pas la table.
 
-        Indispensable pour -dontlearn : un agent fige qui decouvre une
-        situation nouvelle ne doit pas, en la regardant, l'ajouter a la table
-        et donc modifier le modele qu'on evalue.
+        C'est ce qui garantit -dontlearn : un agent fige qui tombe sur une
+        situation nouvelle ne doit pas l'ajouter a la table, sinon le modele
+        evalue changerait.
         """
         if etat in self.table:
             return list(self.table[etat])

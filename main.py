@@ -35,8 +35,8 @@ def main():
     if config.save_path is not None and not config.save_path:
         erreur("-save : nom de fichier vide")
     if config.save_path:
-        # Verifie -save AVANT d'entrainer : une faute de frappe ne doit pas
-        # faire perdre tout l'entrainement a la fin.
+        # On verifie -save avant d'entrainer, pour ne pas perdre tout
+        # l'entrainement a cause d'une faute de frappe.
         try:
             verifier_chemin_sauvegarde(config.save_path)
         except ErreurModele as probleme:

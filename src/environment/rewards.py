@@ -1,7 +1,7 @@
-"""Bareme de recompenses : evenement du pas -> nombre.
+"""Bareme des recompenses : evenement du pas -> nombre.
 
-C'est l'environnement qui recompense l'agent, pas l'agent qui se recompense
-lui-meme : le sujet parle de "rewards granted by the environment (or board)".
+Les recompenses sont donnees par le plateau, l'agent ne se les calcule pas
+lui-meme.
 """
 
 from . import board as bd
@@ -19,8 +19,8 @@ BAREME = {
 def recompense(event):
     """Recompense du pas qui a produit `event`.
 
-    Un evenement absent du bareme doit lever KeyError : une erreur bruyante
-    vaut mieux qu'une recompense inventee en silence.
+    Un evenement absent du bareme leve KeyError : mieux vaut une erreur
+    visible qu'une recompense inventee sans le dire.
     """
     if event in BAREME:
         return BAREME[event]

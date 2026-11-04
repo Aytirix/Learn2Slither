@@ -46,9 +46,9 @@ AJOUTS = tuple(base * 10 ** e for e in range(1, 6) for base in (1, 2, 5)) \
     + tuple(n * 1_000_000 for n in range(1, 11))
 AJOUT_DEFAUT = 1_000
 
-# Explications courtes affichees sous chaque parametre (IA.md pour le
-# detail). epsilon = probabilite de jouer au hasard : il part de 1 (tout au
-# hasard) et descend en ligne droite jusqu'a son minimum en PAS CIBLE pas.
+# Courtes explications affichees sous chaque parametre. epsilon est la
+# probabilite de jouer au hasard : il part de 1 et descend en ligne droite
+# jusqu'a son minimum, atteint au bout de "pas cible" pas.
 AIDE_VALEUR_INITIALE = "note d'un coup inconnu (haut = explore)"
 AIDE_PAS_CIBLE = "pas pour passer de 100 % hasard au minimum"
 AIDE_PLATEAU = "cote du plateau pendant l'entrainement"
@@ -232,7 +232,8 @@ class TrainingScreen:
 
     def _lancer(self, agent, chemin):
         try:
-            # Comme -save : on verifie qu'on pourra ecrire AVANT d'entrainer.
+            # Comme pour -save : on verifie qu'on pourra ecrire avant
+            # d'entrainer.
             modele.verifier_chemin_sauvegarde(chemin)
         except modele.ErreurModele as erreur:
             self.formulaire.message = str(erreur)

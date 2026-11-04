@@ -19,8 +19,8 @@ SPEEDS = (1.0, 5.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0, 75.0, 100.0,
 VITESSE_FINIE_MAX = SPEEDS[-2]
 DEFAULT_SPEED = 5.0
 
-# EVALUATION : longueur a atteindre. Tant qu'aucune partie n'y arrive, on
-# en rejoue une autre. 35 = le palier de bonus le plus haut du sujet.
+# Menu EVALUATION : longueur a atteindre. Tant qu'aucune partie n'y arrive,
+# on en relance une. 35 correspond au palier de bonus le plus haut.
 OBJECTIF_DEFAUT = 35
 OBJECTIFS = tuple(range(5, 101, 5))
 

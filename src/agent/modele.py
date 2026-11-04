@@ -1,8 +1,8 @@
-"""Etape 11 : sauvegarder et recharger un agent (IA.md section 11.5).
+"""Sauvegarde et chargement d'un agent.
 
-Le sujet demande qu'un modele tienne dans UN fichier qu'on peut recharger
-pour reprendre l'apprentissage, ou pour l'evaluer avec -dontlearn. Le format
-est du JSON, lisible a l'oeil :
+Un modele tient dans un seul fichier, qu'on peut recharger pour continuer
+l'entrainement ou pour l'evaluer avec -dontlearn. C'est du JSON, pour
+pouvoir l'ouvrir et le lire :
 
     {
       "format": "learn2slither-qtable",
@@ -18,9 +18,9 @@ est du JSON, lisible a l'oeil :
       }
     }
 
-Seule contrainte : JSON n'accepte pas un tuple comme cle, seulement du texte.
-L'etat (('R', 2), ('G', 2), ('W', 3)) devient donc la cle "R2|G2|W3" a
-l'ecriture, et redevient un tuple a la lecture.
+JSON n'accepte que du texte comme cle, pas un tuple : l'etat
+(('R', 2), ('G', 2), ('W', 3)) est donc ecrit "R2|G2|W3", et reconverti en
+tuple a la lecture.
 """
 
 import json
@@ -34,19 +34,18 @@ from .qtable import QTable
 FORMAT = "learn2slither-qtable"
 REGLE = "qlearning"
 
-# Plus grand compteur accepte (visites, parties, pas). Bien au-dela de tout
-# entrainement reel, mais assez petit pour que les calculs qui l'utilisent
-# (alpha = 1/n^0.7, epsilon = pas/pas_cible) ne debordent jamais.
+# Plus grand compteur accepte (visites, parties, pas). Largement plus que ce
+# qu'un vrai entrainement atteint, et assez petit pour que alpha = 1/n^0.7
+# et epsilon = pas/pas_cible ne debordent jamais.
 COMPTEUR_MAX = 10 ** 15
 
 
 class ErreurModele(ValueError):
     """Fichier de modele absent, illisible, incompatible ou non inscriptible.
 
-    Toute erreur liee a un fichier de modele devient une ErreurModele, avec
-    un message lisible : le programme l'affiche et s'arrete proprement, au
-    lieu de planter sur une trace Python (le sujet note 0 un programme qui
-    quitte de facon inattendue).
+    Tout probleme de fichier de modele devient une ErreurModele avec un
+    message clair : le programme l'affiche et s'arrete proprement, sans
+    trace Python.
     """
 
 
@@ -71,10 +70,10 @@ def texte_vers_etat(texte):
 # -- Ecriture ----------------------------------------------------------------
 
 def verifier_chemin_sauvegarde(chemin):
-    """Verifie qu'on pourra ecrire dans `chemin`, AVANT d'entrainer.
+    """Verifie, avant l'entrainement, qu'on pourra ecrire dans `chemin`.
 
-    Sans cette verification, une faute de frappe dans -save ne se verrait
-    qu'a la toute fin, apres des minutes d'entrainement perdues.
+    Sinon une faute de frappe dans -save ne se verrait qu'a la fin, et
+    l'entrainement serait perdu.
     """
     if os.path.isdir(chemin):
         raise ErreurModele(
@@ -153,8 +152,8 @@ def sauvegarder(agent, chemin):
 def charger(chemin, rng=None):
     """Recree un agent a partir d'un fichier ecrit par sauvegarder().
 
-    Leve ErreurModele, avec un message clair, plutot que de planter ou,
-    pire, de charger un modele incompatible sans rien dire.
+    Leve ErreurModele avec un message clair si le fichier pose probleme,
+    plutot que de planter ou de charger sans prevenir un modele incompatible.
     """
     donnees = _lire_json(chemin)
     _verifier_compatibilite(donnees, chemin)
@@ -180,11 +179,11 @@ def charger(chemin, rng=None):
 
 
 def _lire_contenu(donnees):
-    """Valide TOUT le contenu et reconstruit la table.
+    """Verifie tout le contenu et reconstruit la table.
 
-    Chaque valeur est controlee ici, au chargement : un modele corrompu doit
-    etre refuse tout de suite, pas planter au milieu d'une partie le jour
-    ou l'etat abime est enfin rencontre.
+    Tout est controle des le chargement : un modele abime est refuse tout
+    de suite, au lieu de faire planter une partie plus tard, le jour ou
+    l'etat abime est rencontre.
     """
     hyper = donnees["hyperparametres"]
     _nombre(hyper["gamma"], "gamma", 0.0, 1.0)

@@ -1,7 +1,7 @@
-"""Etape 12 : fabriquer l'agent que demande la ligne de commande.
+"""Cree l'agent demande par la ligne de commande.
 
     -baseline random    -> agent de reference, sans apprentissage
-    -load FICHIER       -> agent recharge depuis un modele (etape 11)
+    -load FICHIER       -> agent recharge depuis un modele (voir modele.py)
     (rien)              -> agent neuf, qui part de zero
     -dontlearn          -> l'agent ci-dessus, fige : il joue sans apprendre
 """

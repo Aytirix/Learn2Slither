@@ -37,25 +37,26 @@ END_CAUSE_LABELS = {
     TIMEOUT: "trop de pas sans pomme",
 }
 
-# Pas sans pomme toleres avant troncature, par case du plateau.
+# Nombre de pas sans pomme acceptes avant de couper la partie, par case du
+# plateau.
 #
-# Proportionnel a l'AIRE et non a la longueur du serpent : c'est l'aire qui
-# donne le temps de recherche, puisque le serpent ne detecte une pomme que si
-# elle partage sa ligne ou sa colonne.
+# La limite depend de l'aire et pas de la longueur du serpent : il ne voit
+# une pomme que si elle est sur sa ligne ou sa colonne, donc plus le plateau
+# est grand, plus il lui faut de temps pour en trouver une.
 #
-# Mesure : 300 parties par cellule, graine fixe, agent aleatoire ecartant les
-# directions immediatement mortelles. Pourcentage de parties tronquees :
+# Parties coupees, sur 300 parties par case du tableau (graine fixe, agent
+# au hasard qui evite juste les coups mortels) :
 #
 #     regle              10x10     20x20     30x30
 #     4 x aire             2 %       5 %       6 %
 #     100 x longueur      14 %      76 %      97 %
 #     300 (constante)      8 %      86 %      98 %
 #
-# Une limite qui ignore la taille transforme le comportement normal en
-# troncature des que le plateau grandit. Celle-ci garde un taux stable.
+# Avec une limite fixe, presque toutes les parties seraient coupees sur un
+# grand plateau. Avec 4 x aire, le taux reste a peu pres le meme.
 IDLE_FACTOR = 4
 
-# Longueur du serpent au depart, imposee par le sujet.
+# Longueur du serpent au depart.
 SNAKE_LENGTH = 3
 
 WALL_CHAR = "W"
@@ -164,11 +165,10 @@ class Board:
     def step(self, direction):
         """Avance d'une case et retourne l'evenement de jeu du pas.
 
-        La valeur rendue decrit ce qui est arrive au serpent : deplacement,
-        pomme, ou mort. Elle ne dit PAS si la partie s'arrete : une troncature
-        laisse l'evenement du pas intact (un deplacement reste un
-        deplacement, et garde son cout) et se lit sur `end_cause`,
-        `truncated` et `alive`.
+        La valeur rendue dit ce qui est arrive au serpent : deplacement,
+        pomme ou mort. Elle ne dit pas si la partie est finie : quand la
+        partie est coupee, le pas reste un simple deplacement (avec son
+        cout), et la fin se lit sur `end_cause`, `truncated` et `alive`.
         """
         if not self.alive:
             return self.last_event
@@ -228,20 +228,20 @@ class Board:
         return cause
 
     def truncate(self):
-        """Arret sans mort : le serpent etait vivant, on a coupe le chrono.
+        """Arrete la partie sans tuer le serpent : il etait encore vivant.
 
-        Publique a dessein : la boucle de jeu possede son propre plafond de
-        securite et doit pouvoir terminer une partie de facon coherente, sans
-        laisser `end_cause` a None sur une partie finie.
+        Methode publique parce que la boucle de jeu a aussi sa propre limite
+        de securite, et doit pouvoir finir une partie proprement, sans
+        laisser `end_cause` a None.
 
-        Deux consequences, et la seconde est le piege a eviter :
+        Ce que ca implique :
 
-        - l'agent doit continuer a bootstrapper (d'ou `dead` qui reste faux),
-          sinon il apprend que vivre longtemps tue ;
-        - le pas qui a declenche la troncature est un deplacement ordinaire
-          et garde son cout. On ne touche donc pas a `last_event` : sinon la
-          recompense de ce pas deviendrait celle d'un evenement "timeout",
-          c'est-a-dire une prime pour avoir atteint la limite.
+        - `dead` reste faux, pour que l'agent tienne encore compte de la
+          suite ; sinon il apprendrait que survivre longtemps fait mourir ;
+        - le dernier pas reste un deplacement normal, avec son cout. On ne
+          change pas `last_event`, sinon ce pas aurait la recompense d'un
+          evenement "timeout", ce qui reviendrait a recompenser le fait
+          d'atteindre la limite.
         """
         self.alive = False
         self.truncated = True
@@ -296,9 +296,6 @@ class Board:
 
     def vision_chars(self):
         """Etat transmis a l'agent : une chaine de symboles par direction.
-
-        C'est la seule information que le serpent percoit ; y ajouter
-        quoi que ce soit d'autre est sanctionne par le sujet.
         """
         return {
             d: "".join(self.cell_char(c) for c in cells)

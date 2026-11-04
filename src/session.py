@@ -20,10 +20,9 @@ from collections import Counter
 from . import graine as gr
 from .environment import board as bd
 
-# Plafond de securite de la boucle de jeu. `Board` tronque deja les parties
-# qui tournent en rond ; ce garde-fou-la protege contre un bug qui laisserait
-# `alive` a vrai, cas ou la boucle ne rendrait jamais la main (et ou la suite
-# de tests se figerait au lieu d'echouer).
+# Limite de securite de la boucle de jeu. `Board` coupe deja les parties qui
+# tournent en rond ; ceci evite seulement une boucle infinie si un bug
+# laissait `alive` a vrai (les tests bloqueraient au lieu d'echouer).
 MAX_STEPS_PER_SESSION = 1_000_000
 
 
@@ -50,9 +49,8 @@ class SessionStats:
     def mean_length(self):
         """Moyenne des longueurs maximales atteintes, une par partie.
 
-        Ce n'est pas la longueur moyenne instantanee : c'est la moyenne des
-        records de chaque partie. C'est la vraie mesure de progression, le
-        maximum global etant surtout de la chance.
+        C'est la moyenne du record de chaque partie. Elle montre mieux la
+        progression que le maximum global, qui depend surtout de la chance.
         """
         return statistics.fmean(self.lengths) if self.lengths else 0.0
 
@@ -88,19 +86,19 @@ class SessionStats:
 def play_session(board, agent=None, reward_fn=None, trace=False):
     """Joue une partie complete et retourne la cause de fin.
 
-    Deux notions distinctes circulent ici, et les confondre est le bug que
-    tout ce decoupage sert a eviter :
+    Il faut bien distinguer deux choses :
 
-    - `event` est l'evenement de jeu du pas (deplacement, pomme, mort). Il
-      determine la RECOMPENSE. Une troncature ne le modifie pas : le pas qui
-      atteint la limite est un deplacement ordinaire et garde son cout.
-    - `board.dead` dit s'il existe un apres. Il determine le BOOTSTRAP. Il
-      est faux sur une troncature, car le serpent etait vivant.
+    - `event`, ce qui s'est passe pendant le pas (deplacement, pomme, mort),
+      donne la recompense. Si la partie est coupee, le dernier pas reste un
+      deplacement normal, avec son cout ;
+    - `board.dead` dit s'il y a une suite, et donc si la mise a jour tient
+      compte de l'etat suivant. Il reste faux si la partie est coupee,
+      puisque le serpent etait vivant.
     """
     debut = getattr(agent, "debut_partie", None)
     if debut is not None:
-        # L'agent raisonne dans le repere du serpent : il doit savoir dans
-        # quel sens celui-ci part (IA.md section 6.6).
+        # L'agent raisonne par rapport a sa direction : il doit savoir dans
+        # quel sens le serpent part.
         debut(board.direction)
 
     while board.alive and board.steps < MAX_STEPS_PER_SESSION:
@@ -120,14 +118,14 @@ def play_session(board, agent=None, reward_fn=None, trace=False):
             print("Action : {}".format(bd.ACTION_NAMES.get(action, "?")))
 
     if board.alive:
-        # Plafond atteint : le plateau n'a pas termine la partie lui-meme.
-        # On la termine proprement, sinon `end_cause` resterait a None et une
-        # partie finie sans cause casserait les statistiques.
+        # Limite de securite atteinte sans que le plateau ait fini la partie.
+        # On la termine proprement : sans cause de fin, les statistiques
+        # planteraient.
         board.truncate()
 
     fin = getattr(agent, "fin_partie", None)
     if fin is not None:
-        # C'est ici que l'agent apprend : il rejoue la partie, dans l'ordre.
+        # L'agent apprend la partie qui vient de se terminer.
         fin()
     return board.end_cause
 
@@ -147,9 +145,8 @@ def run_sessions(config, agent=None, reward_fn=None):
         try:
             play_session(board, agent, reward_fn, trace=config.trace)
         except KeyboardInterrupt:
-            # Ctrl+C sur un long entrainement : on garde ce qui est appris.
-            # Les parties terminees sont gardees ; celle qui etait en cours
-            # n'est en general pas apprise.
+            # Ctrl+C pendant un long entrainement : les parties terminees
+            # sont gardees, celle qui etait en cours est en general perdue.
             print("\nInterruption : arret apres {} parties completes".format(
                 stats.games))
             break

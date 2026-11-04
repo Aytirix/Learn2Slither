@@ -184,10 +184,10 @@ class Game:
             self.revenir_au_present()
 
     # -- retour en arriere (mode pas a pas) ---------------------------
-    # On ne fait que MONTRER le passe : la partie, le hasard des pommes et
-    # ce que l'agent a appris ne sont jamais rejoues ni annules. Revenir en
-    # avant reaffiche les photos jusqu'au present ; c'est seulement depuis
-    # le present qu'un nouveau pas est vraiment joue.
+    # On ne fait qu'afficher le passe : la partie, les pommes et ce que
+    # l'agent a appris ne sont ni rejoues ni annules. En revenant en avant,
+    # on reaffiche les photos jusqu'au present, et un nouveau pas n'est joue
+    # qu'une fois revenu au present.
     def pas_suivant(self):
         """N ou DROITE : avance dans l'historique, sinon joue un pas."""
         if self.recul == 0:
@@ -292,11 +292,10 @@ class Game:
         if self.paused:
             return
         if self.step_by_step and self.steps_left <= 0:
-            # En attente du prochain N : on laisse quand meme l'animation
-            # du dernier pas aller a son terme. Sans cela, `acc` restait a 0
-            # juste apres le pas : la tete etait deja sur sa nouvelle case
-            # mais le corps, interpole, restait dessine a l'ancienne place
-            # jusqu'au N suivant.
+            # En attendant le prochain N, on laisse l'animation du dernier
+            # pas se terminer. Sinon `acc` reste a 0 : la tete est deja sur
+            # sa nouvelle case mais le corps reste dessine a l'ancienne
+            # place jusqu'au N suivant.
             self.acc = min(self.acc + dt, self.interval)
             return
 

@@ -2,16 +2,16 @@
 
 Principe
 --------
-Au lancement, on fixe une GRAINE DE DEPART (celle de -seed, ou un nombre
-tire au hasard si -seed n'est pas donne). La partie numero n recoit ensuite
-sa propre graine :
+Au lancement, on fixe une graine de depart (celle de -seed, ou un nombre
+tire au hasard sans -seed). La partie numero n recoit ensuite sa propre
+graine :
 
     graine de la partie n = graine de depart + n - 1
 
 Exemple avec -seed 1000 : partie 1 -> 1000, partie 2 -> 1001, ...,
 partie 847 -> 1846.
 
-Au debut de CHAQUE partie, on resème le generateur du plateau (position du
+Au debut de chaque partie, on resème le generateur du plateau (position du
 serpent, pommes) et celui de l'agent (hasard d'exploration, egalites) avec
 cette graine. Une partie ne depend donc plus de celles d'avant : pour revoir
 la partie 847, il suffit de relancer avec -seed 1846, et c'est la partie 1.
